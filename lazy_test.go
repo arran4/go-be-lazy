@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/arran4/goa4web/internal/lazy"
+	lazy "github.com/arran4/go-be-lazy"
 )
 
 func must[T any](v T, err error) T {
