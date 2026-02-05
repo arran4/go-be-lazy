@@ -1,0 +1,32 @@
+name: PR Fix and Format
+
+on:
+  pull_request:
+
+jobs:
+  fix-fmt:
+    name: Fix and Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Run go fix
+        run: go fix ./...
+
+      - name: Run go fmt
+        run: go fmt ./...
+
+      - name: Check for changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Code is not formatted or fixed. Please run 'go fix ./...' and 'go fmt ./...' and commit changes."
+            git diff
+            exit 1
+          fi
