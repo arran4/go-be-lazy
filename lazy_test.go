@@ -212,3 +212,32 @@ func TestMapConcurrent(t *testing.T) {
 		t.Fatalf("calls=%d", calls)
 	}
 }
+
+func TestMapDefaultValueCachingBug(t *testing.T) {
+	m := make(map[int32]*lazy.Value[int])
+	var mu sync.Mutex
+
+	// First call: fetch fails, should return default value and cache it
+	v, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) {
+		return 0, errors.New("fail")
+	}, lazy.DefaultValue[int](100))
+
+	if err != nil {
+		t.Fatalf("first call: unexpected error: %v", err)
+	}
+	if v != 100 {
+		t.Fatalf("first call: expected 100, got %v", v)
+	}
+
+	// Second call: should return the cached default value
+	v2, err2 := lazy.Map(&m, &mu, 1, func(int32) (int, error) {
+		return 0, errors.New("fail again")
+	})
+
+	if err2 != nil {
+		t.Fatalf("second call: unexpected error: %v", err2)
+	}
+	if v2 != 100 {
+		t.Fatalf("second call: expected 100, got %v", v2)
+	}
+}
