@@ -212,3 +212,23 @@ func TestMapConcurrent(t *testing.T) {
 		t.Fatalf("calls=%d", calls)
 	}
 }
+
+func TestMapBoundedGrowth(t *testing.T) {
+	m := make(map[int32]*lazy.Value[int])
+	var mu sync.Mutex
+	fetch := func(id int32) (int, error) { return int(id), nil }
+
+	// Simulate adding many items with MaxSize
+	limit := 1000
+	maxSize := 100
+	for i := 0; i < limit; i++ {
+		_, err := lazy.Map(&m, &mu, int32(i), fetch, lazy.MaxSize[int](maxSize))
+		if err != nil {
+			t.Fatalf("Map failed: %v", err)
+		}
+	}
+
+	if len(m) != maxSize {
+		t.Fatalf("Expected map size %d, got %d", maxSize, len(m))
+	}
+}

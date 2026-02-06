@@ -59,6 +59,7 @@ type args[T any] struct {
 	setID        *int32
 	setValue     *T
 	defaultValue *T
+	maxSize      int
 }
 
 // Option configures the behavior of the Map function.
@@ -91,6 +92,10 @@ func Must[T any]() Option[T] { return func(a *args[T]) { a.must = true } }
 // DefaultValue returns an Option that specifies a fallback value to return if the value is not found
 // (when DontFetch is used) or if fetching fails (unless Must is also used).
 func DefaultValue[T any](v T) Option[T] { return func(a *args[T]) { a.defaultValue = &v } }
+
+// MaxSize returns an Option that limits the size of the map.
+// If the map reaches the specified size, adding a new item will cause a random existing item to be evicted.
+func MaxSize[T any](size int) Option[T] { return func(a *args[T]) { a.maxSize = size } }
 
 // Map retrieves or creates a lazy Value in the provided map.
 // It handles locking the map using the provided mutex.
@@ -129,6 +134,12 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 	}
 	lv, ok := (*m)[id]
 	if !ok || args.refresh {
+		if !ok && args.maxSize > 0 && len(*m) >= args.maxSize {
+			for k := range *m {
+				delete(*m, k)
+				break
+			}
+		}
 		lv = &Value[T]{}
 		(*m)[id] = lv
 	}
