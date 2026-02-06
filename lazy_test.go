@@ -230,7 +230,7 @@ func TestMapBoundedGrowth(t *testing.T) {
 
 	if len(m) != maxSize {
 		t.Fatalf("Expected map size %d, got %d", maxSize, len(m))
-  }
+	}
 }
 func TestMapDefaultValueCachingBug(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])

@@ -1,6 +1,7 @@
 package lazy
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -142,10 +143,10 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 		id = *args.setID
 	}
 	if m == nil {
-		return zero, fmt.Errorf("lazy map pointer nil")
+		return zero, errors.New("lazy map pointer nil")
 	}
 	if mu == nil {
-		return zero, fmt.Errorf("lazy map mutex nil")
+		return zero, errors.New("lazy map mutex nil")
 	}
 	mu.Lock()
 	if *m == nil {
@@ -181,7 +182,7 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 
 	if args.dontFetch {
 		if args.mustCached && !loaded {
-			return zero, fmt.Errorf("value not cached")
+			return zero, errors.New("value not cached")
 		}
 		if args.defaultValue != nil {
 			lv.Set(*args.defaultValue)
