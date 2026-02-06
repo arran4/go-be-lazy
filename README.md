@@ -110,3 +110,7 @@ func main() {
 
 - **Value[T]**: `Load`, `Set`, and `Peek` are safe for concurrent use. `Load` guarantees the initialization function runs exactly once.
 - **Map**: Requires the caller to provide a `sync.Mutex` which it uses to protect map operations (insertion/deletion). The value loading itself happens outside the map lock to avoid blocking other lookups, utilizing the internal safety of `Value[T]`.
+
+## License
+
+This project is licensed under the 3-Clause BSD License - see the [LICENSE](LICENSE) file for details.
