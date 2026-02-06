@@ -6,44 +6,68 @@ import (
 	"sync/atomic"
 )
 
+// result holds the value and error for a lazy Value.
+type result[T any] struct {
+	value T
+	err   error
+}
+
 // Value manages a value that is loaded on demand.
 // It guarantees that the initialization function is called only once,
 // even if accessed concurrently.
-// It uses sync.Once for synchronization and atomic.Bool for lock-free status checks.
+// It uses atomic.Value and sync.Mutex for synchronization.
 type Value[T any] struct {
-	once   sync.Once
-	value  T
-	err    error
-	loaded atomic.Bool
+	val atomic.Value
+	mu  sync.Mutex
 }
 
 // Load ensures the value is loaded by executing fn if it hasn't been loaded yet.
 // Subsequent calls return the cached value and error.
 // Safe for concurrent use.
 func (l *Value[T]) Load(fn func() (T, error)) (T, error) {
-	l.once.Do(func() {
-		l.value, l.err = fn()
-		l.loaded.Store(true)
-	})
-	return l.value, l.err
+	if v := l.val.Load(); v != nil {
+		r := v.(*result[T])
+		return r.value, r.err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if v := l.val.Load(); v != nil {
+		r := v.(*result[T])
+		return r.value, r.err
+	}
+	val, err := fn()
+	l.val.Store(&result[T]{value: val, err: err})
+	return val, err
 }
 
 // Set manually sets the value if it hasn't been loaded yet.
 // If the value is already loaded (via Load or Set), this operation is a no-op.
 // Safe for concurrent use.
 func (l *Value[T]) Set(v T) {
-	l.once.Do(func() {
-		l.value = v
-		l.loaded.Store(true)
-	})
+	if l.val.Load() != nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.val.Load() != nil {
+		return
+	}
+	l.val.Store(&result[T]{value: v, err: nil})
+}
+
+// store forcibly sets the value, bypassing the "once" check.
+// This is used internally to overwrite an error state with a default value.
+func (l *Value[T]) store(v T) {
+	l.val.Store(&result[T]{value: v, err: nil})
 }
 
 // Peek returns the cached value and true if it has been loaded.
 // If not loaded, it returns the zero value of T and false.
 // Safe for concurrent use.
 func (l *Value[T]) Peek() (T, bool) {
-	if l.loaded.Load() {
-		return l.value, true
+	if v := l.val.Load(); v != nil {
+		r := v.(*result[T])
+		return r.value, true
 	}
 	var zero T
 	return zero, false
@@ -173,7 +197,7 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 	v, err := lv.Load(func() (T, error) { return fetch(id) })
 	if err != nil {
 		if args.defaultValue != nil && !args.must {
-			lv.Set(*args.defaultValue)
+			lv.store(*args.defaultValue)
 			return *args.defaultValue, nil
 		}
 		if args.must {
