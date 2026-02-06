@@ -13,6 +13,12 @@ type result[T any] struct {
 	err   error
 }
 
+var (
+	ErrMapPointerNil  = errors.New("lazy map pointer nil")
+	ErrMapMutexNil    = errors.New("lazy map mutex nil")
+	ErrValueNotCached = errors.New("value not cached")
+)
+
 // Value manages a value that is loaded on demand.
 // It guarantees that the initialization function is called only once,
 // even if accessed concurrently.
@@ -143,10 +149,10 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 		id = *args.setID
 	}
 	if m == nil {
-		return zero, errors.New("lazy map pointer nil")
+		return zero, ErrMapPointerNil
 	}
 	if mu == nil {
-		return zero, errors.New("lazy map mutex nil")
+		return zero, ErrMapMutexNil
 	}
 	mu.Lock()
 	if *m == nil {
@@ -182,7 +188,7 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 
 	if args.dontFetch {
 		if args.mustCached && !loaded {
-			return zero, errors.New("value not cached")
+			return zero, ErrValueNotCached
 		}
 		if args.defaultValue != nil {
 			lv.Set(*args.defaultValue)
