@@ -191,7 +191,6 @@ func Map[T any](m *map[int32]*Value[T], mu *sync.Mutex, id int32, fetch func(int
 			return zero, ErrValueNotCached
 		}
 		if args.defaultValue != nil {
-			lv.Set(*args.defaultValue)
 			return *args.defaultValue, nil
 		}
 		return v, nil

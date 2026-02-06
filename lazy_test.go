@@ -103,8 +103,8 @@ func TestMapDontFetchDefaultValue(t *testing.T) {
 	if err != nil || v != 42 {
 		t.Fatalf("got %v %v", v, err)
 	}
-	if got, ok := m[5].Peek(); !ok || got != 42 {
-		t.Fatalf("cached %v %v", got, ok)
+	if got, ok := m[5].Peek(); ok {
+		t.Fatalf("unexpectedly cached %v %v", got, ok)
 	}
 }
 
