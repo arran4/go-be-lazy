@@ -62,9 +62,9 @@ func (l *Value[T]) Set(v T) {
 	l.val.Store(&result[T]{value: v, err: nil})
 }
 
-// store forcibly sets the value, bypassing the "once" check.
+// Store forcibly sets the value, bypassing the "once" check.
 // This is used internally to overwrite an error state with a default value.
-func (l *Value[T]) store(v T) {
+func (l *Value[T]) Store(v T) {
 	l.val.Store(&result[T]{value: v, err: nil})
 }
 
@@ -77,31 +77,6 @@ func (l *Value[T]) Peek() (T, bool) {
 		return r.value, true
 	}
 	var zero T
-	return zero, false
-}
-
-// EvictionPolicy defines the strategy for removing items when the map reaches MaxSize.
-// Implementations must be thread-safe for Access if they maintain state and are used concurrently.
-type EvictionPolicy[K comparable, V any] interface {
-	// Access is called when a key is accessed (read or written).
-	// This is called outside the map mutex, so implementations must handle concurrency.
-	Access(key K)
-	// SelectVictim returns the key that should be evicted.
-	// It is passed the map in case it needs to inspect it.
-	// This is called while the map mutex is held.
-	SelectVictim(m map[K]*Value[V]) (K, bool)
-}
-
-// RandomEvictionPolicy implements EvictionPolicy using Go's map iteration order.
-type RandomEvictionPolicy[K comparable, V any] struct{}
-
-func (p *RandomEvictionPolicy[K, V]) Access(key K) {}
-
-func (p *RandomEvictionPolicy[K, V]) SelectVictim(m map[K]*Value[V]) (K, bool) {
-	for k := range m {
-		return k, true
-	}
-	var zero K
 	return zero, false
 }
 
@@ -255,7 +230,7 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 	v, err := lv.Load(func() (V, error) { return fetch(id) })
 	if err != nil {
 		if args.defaultValue != nil && !args.must {
-			lv.store(*args.defaultValue)
+			lv.Store(*args.defaultValue)
 			// Should we consider default value access? Yes.
 			if args.evictionPolicy != nil {
 				args.evictionPolicy.Access(id)
