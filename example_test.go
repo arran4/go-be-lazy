@@ -33,25 +33,29 @@ func ExampleLazyMap() {
 
 func ExampleLazyMap_withEviction() {
 	// Use LRU policy for deterministic eviction
-	cache := lazy.NewLazyMap[string, int]()
 	lru := lazy.NewLRUEvictionPolicy[string, int]()
+
+	// Apply MaxSize and EvictionPolicy globally
+	cache := lazy.NewLazyMap[string, int](
+		lazy.MaxSize[string, int](2),
+		lazy.WithEvictionPolicy[string, int](lru),
+	)
 
 	fetch := func(key string) (int, error) { return len(key), nil }
 
-	// Add items with MaxSize 2
+	// Add items. MaxSize is 2.
 	// A: [A]
-	cache.Get("A", fetch, lazy.MaxSize[string, int](2), lazy.WithEvictionPolicy[string, int](lru))
+	cache.Get("A", fetch)
 	// B: [B, A]
-	cache.Get("B", fetch, lazy.MaxSize[string, int](2), lazy.WithEvictionPolicy[string, int](lru))
+	cache.Get("B", fetch)
 
 	// Access A: [A, B]
-	cache.Get("A", fetch, lazy.WithEvictionPolicy[string, int](lru))
+	cache.Get("A", fetch)
 
 	// Add C: [C, A]. B is evicted.
-	cache.Get("C", fetch, lazy.MaxSize[string, int](2), lazy.WithEvictionPolicy[string, int](lru))
+	cache.Get("C", fetch)
 
 	_, errA := cache.Get("A", nil, lazy.DontFetch[string, int]())
-	// B should be evicted, so DontFetch returns error/not found
 	_, errB := cache.Get("B", nil, lazy.DontFetch[string, int](), lazy.MustBeCached[string, int]())
 	_, errC := cache.Get("C", nil, lazy.DontFetch[string, int]())
 

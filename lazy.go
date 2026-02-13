@@ -251,30 +251,45 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 
 // LazyMap manages a collection of lazy values with a built-in mutex.
 type LazyMap[K comparable, V any] struct {
-	mu sync.Mutex
-	m  map[K]*Value[V]
+	mu   sync.Mutex
+	m    map[K]*Value[V]
+	opts []Option[K, V]
 }
 
-// NewLazyMap creates a new LazyMap.
-func NewLazyMap[K comparable, V any]() *LazyMap[K, V] {
+// NewLazyMap creates a new LazyMap with optional default settings.
+func NewLazyMap[K comparable, V any](opts ...Option[K, V]) *LazyMap[K, V] {
 	return &LazyMap[K, V]{
-		m: make(map[K]*Value[V]),
+		m:    make(map[K]*Value[V]),
+		opts: opts,
 	}
 }
 
 // Get retrieves or creates a value for the given key.
 // It wraps the Map function, handling the map and mutex automatically.
+// Options passed here are merged with the default options provided to NewLazyMap.
 func (lm *LazyMap[K, V]) Get(key K, fetch func(K) (V, error), opts ...Option[K, V]) (V, error) {
-	return Map(&lm.m, &lm.mu, key, fetch, opts...)
+	// Combine default options with call-specific options.
+	// Call-specific options come last to override defaults.
+	combinedOpts := make([]Option[K, V], 0, len(lm.opts)+len(opts))
+	combinedOpts = append(combinedOpts, lm.opts...)
+	combinedOpts = append(combinedOpts, opts...)
+	return Map(&lm.m, &lm.mu, key, fetch, combinedOpts...)
 }
 
 // Set manually sets the value for the given key.
 func (lm *LazyMap[K, V]) Set(key K, value V) {
-	// We can use Map with Set option.
-	Map(&lm.m, &lm.mu, key, nil, Set[K, V](value))
+	// We use Map with Set option. We also pass global options so policies (like eviction) are respected if Access is triggered.
+	// Note: Set option bypasses fetch but triggers policy access if updated in Map logic.
+	combinedOpts := make([]Option[K, V], 0, len(lm.opts)+1)
+	combinedOpts = append(combinedOpts, lm.opts...)
+	combinedOpts = append(combinedOpts, Set[K, V](value))
+	Map(&lm.m, &lm.mu, key, nil, combinedOpts...)
 }
 
 // Remove removes the value associated with the key.
 func (lm *LazyMap[K, V]) Remove(key K) {
-	Map(&lm.m, &lm.mu, key, nil, Clear[K, V]())
+	combinedOpts := make([]Option[K, V], 0, len(lm.opts)+1)
+	combinedOpts = append(combinedOpts, lm.opts...)
+	combinedOpts = append(combinedOpts, Clear[K, V]())
+	Map(&lm.m, &lm.mu, key, nil, combinedOpts...)
 }
