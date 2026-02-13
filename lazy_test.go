@@ -232,6 +232,30 @@ func TestMapBoundedGrowth(t *testing.T) {
 		t.Fatalf("Expected map size %d, got %d", maxSize, len(m))
 	}
 }
+
+func TestMapEvictionPolicy(t *testing.T) {
+	// Since Random and RangeFirst are currently effectively the same,
+	// we just test that eviction happens.
+	m := make(map[int32]*lazy.Value[int])
+	var mu sync.Mutex
+	fetch := func(id int32) (int, error) { return int(id), nil }
+
+	limit := 50
+	maxSize := 10
+	for i := 0; i < limit; i++ {
+		_, err := lazy.Map(&m, &mu, int32(i), fetch,
+			lazy.MaxSize[int32, int](maxSize),
+			lazy.WithEvictionPolicy[int32, int](lazy.EvictionPolicyRangeFirst))
+		if err != nil {
+			t.Fatalf("Map failed: %v", err)
+		}
+	}
+
+	if len(m) != maxSize {
+		t.Fatalf("Expected map size %d, got %d", maxSize, len(m))
+	}
+}
+
 func TestMapDefaultValueCachingBug(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex

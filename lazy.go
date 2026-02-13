@@ -80,17 +80,31 @@ func (l *Value[T]) Peek() (T, bool) {
 	return zero, false
 }
 
+// EvictionPolicy defines the strategy for removing items when the map reaches MaxSize.
+type EvictionPolicy int
+
+const (
+	// EvictionPolicyRandom removes an item based on Go's map iteration order.
+	// This is the default policy. It effectively removes a pseudo-random item.
+	EvictionPolicyRandom EvictionPolicy = iota
+	// EvictionPolicyRangeFirst removes the first item encountered during map iteration.
+	// Since Go map iteration is randomized, this behaves similarly to EvictionPolicyRandom
+	// but is explicit in its implementation approach.
+	EvictionPolicyRangeFirst
+)
+
 // args holds the configuration for Map operations.
 type args[K comparable, V any] struct {
-	dontFetch    bool
-	refresh      bool
-	clear        bool
-	must         bool
-	mustCached   bool
-	setID        *K
-	setValue     *V
-	defaultValue *V
-	maxSize      int
+	dontFetch      bool
+	refresh        bool
+	clear          bool
+	must           bool
+	mustCached     bool
+	setID          *K
+	setValue       *V
+	defaultValue   *V
+	maxSize        int
+	evictionPolicy EvictionPolicy
 }
 
 // Option configures the behavior of the Map function.
@@ -129,9 +143,15 @@ func DefaultValue[K comparable, V any](v V) Option[K, V] {
 }
 
 // MaxSize returns an Option that limits the size of the map.
-// If the map reaches the specified size, adding a new item will cause a random existing item to be evicted.
+// If the map reaches the specified size, adding a new item will cause an existing item to be evicted.
+// The default eviction policy is EvictionPolicyRandom.
 func MaxSize[K comparable, V any](size int) Option[K, V] {
 	return func(a *args[K, V]) { a.maxSize = size }
+}
+
+// WithEvictionPolicy returns an Option that specifies the eviction policy to use when MaxSize is reached.
+func WithEvictionPolicy[K comparable, V any](policy EvictionPolicy) Option[K, V] {
+	return func(a *args[K, V]) { a.evictionPolicy = policy }
 }
 
 // Map retrieves or creates a lazy Value in the provided map.
@@ -172,9 +192,20 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 	lv, ok := (*m)[id]
 	if !ok || args.refresh {
 		if !ok && args.maxSize > 0 && len(*m) >= args.maxSize {
-			for k := range *m {
-				delete(*m, k)
-				break
+			switch args.evictionPolicy {
+			case EvictionPolicyRandom, EvictionPolicyRangeFirst:
+				// Go's map iteration is random, so taking the "first" key
+				// from the range loop is effectively random eviction.
+				for k := range *m {
+					delete(*m, k)
+					break
+				}
+			default:
+				// Fallback to random/range if policy is unknown
+				for k := range *m {
+					delete(*m, k)
+					break
+				}
 			}
 		}
 		lv = &Value[V]{}
