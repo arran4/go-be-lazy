@@ -63,7 +63,7 @@ func TestValueSetPeek(t *testing.T) {
 
 func TestMapNilMap(t *testing.T) {
 	var mu sync.Mutex
-	_, err := lazy.Map[int](nil, &mu, 1, nil)
+	_, err := lazy.Map[int, int](nil, &mu, 1, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -90,7 +90,7 @@ func TestMapFetchCaching(t *testing.T) {
 func TestMapDontFetchMustCached(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
-	_, err := lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int](), lazy.MustBeCached[int]())
+	_, err := lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int32, int](), lazy.MustBeCached[int32, int]())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -99,7 +99,7 @@ func TestMapDontFetchMustCached(t *testing.T) {
 func TestMapDontFetchDefaultValue(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
-	v, err := lazy.Map(&m, &mu, 5, nil, lazy.DontFetch[int](), lazy.DefaultValue[int](42))
+	v, err := lazy.Map(&m, &mu, 5, nil, lazy.DontFetch[int32, int](), lazy.DefaultValue[int32, int](42))
 	if err != nil || v != 42 {
 		t.Fatalf("got %v %v", v, err)
 	}
@@ -111,7 +111,7 @@ func TestMapDontFetchDefaultValue(t *testing.T) {
 func TestMapMustWrapError(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
-	_, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 0, errors.New("bad") }, lazy.Must[int]())
+	_, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 0, errors.New("bad") }, lazy.Must[int32, int]())
 	if err == nil || err.Error() != "fetch error: bad" {
 		t.Fatalf("err=%v", err)
 	}
@@ -120,7 +120,7 @@ func TestMapMustWrapError(t *testing.T) {
 func TestMapDefaultValueOnError(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
-	v, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 0, errors.New("bad") }, lazy.DefaultValue[int](5))
+	v, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 0, errors.New("bad") }, lazy.DefaultValue[int32, int](5))
 	if err != nil || v != 5 {
 		t.Fatalf("got %v %v", v, err)
 	}
@@ -130,7 +130,7 @@ func TestMapClear(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
 	lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 1, nil })
-	lazy.Map(&m, &mu, 1, nil, lazy.Clear[int]())
+	lazy.Map(&m, &mu, 1, nil, lazy.Clear[int32, int]())
 	if _, ok := m[1]; ok {
 		t.Fatal("value not cleared")
 	}
@@ -145,7 +145,7 @@ func TestMapRefresh(t *testing.T) {
 	if v != 1 {
 		t.Fatalf("first=%d", v)
 	}
-	v = must(lazy.Map(&m, &mu, 1, fetch, lazy.Refresh[int]()))
+	v = must(lazy.Map(&m, &mu, 1, fetch, lazy.Refresh[int32, int]()))
 	if v != 2 {
 		t.Fatalf("refresh=%d", v)
 	}
@@ -157,11 +157,11 @@ func TestMapRefresh(t *testing.T) {
 func TestMapSet(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
-	v, err := lazy.Map(&m, &mu, 1, nil, lazy.Set[int](7))
+	v, err := lazy.Map(&m, &mu, 1, nil, lazy.Set[int32, int](7))
 	if err != nil || v != 7 {
 		t.Fatalf("set %v %v", v, err)
 	}
-	v, err = lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int]())
+	v, err = lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int32, int]())
 	if err != nil || v != 7 {
 		t.Fatalf("cached %v %v", v, err)
 	}
@@ -172,7 +172,7 @@ func TestMapSetID(t *testing.T) {
 	var calls int
 	fetch := func(id int32) (int, error) { calls++; return int(id), nil }
 	var mu sync.Mutex
-	v, err := lazy.Map(&m, &mu, 1, fetch, lazy.SetID[int](2))
+	v, err := lazy.Map(&m, &mu, 1, fetch, lazy.SetID[int32, int](2))
 	if err != nil || v != 2 {
 		t.Fatalf("got %v %v", v, err)
 	}
@@ -222,7 +222,7 @@ func TestMapBoundedGrowth(t *testing.T) {
 	limit := 1000
 	maxSize := 100
 	for i := 0; i < limit; i++ {
-		_, err := lazy.Map(&m, &mu, int32(i), fetch, lazy.MaxSize[int](maxSize))
+		_, err := lazy.Map(&m, &mu, int32(i), fetch, lazy.MaxSize[int32, int](maxSize))
 		if err != nil {
 			t.Fatalf("Map failed: %v", err)
 		}
@@ -239,7 +239,7 @@ func TestMapDefaultValueCachingBug(t *testing.T) {
 	// First call: fetch fails, should return default value and cache it
 	v, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) {
 		return 0, errors.New("fail")
-	}, lazy.DefaultValue[int](100))
+	}, lazy.DefaultValue[int32, int](100))
 
 	if err != nil {
 		t.Fatalf("first call: unexpected error: %v", err)
@@ -258,5 +258,54 @@ func TestMapDefaultValueCachingBug(t *testing.T) {
 	}
 	if v2 != 100 {
 		t.Fatalf("second call: expected 100, got %v", v2)
+	}
+}
+
+func TestMapStringKeys(t *testing.T) {
+	m := make(map[string]*lazy.Value[string])
+	var mu sync.Mutex
+	fetch := func(key string) (string, error) {
+		return "val:" + key, nil
+	}
+
+	v, err := lazy.Map(&m, &mu, "foo", fetch)
+	if err != nil || v != "val:foo" {
+		t.Fatalf("got %v %v", v, err)
+	}
+
+	// Cache hit
+	v, err = lazy.Map(&m, &mu, "foo", nil, lazy.DontFetch[string, string]())
+	if err != nil || v != "val:foo" {
+		t.Fatalf("cached got %v %v", v, err)
+	}
+}
+
+func TestLazyMap(t *testing.T) {
+	lm := lazy.NewLazyMap[string, int]()
+
+	// Get with fetch
+	v, err := lm.Get("one", func(string) (int, error) { return 1, nil })
+	if err != nil || v != 1 {
+		t.Fatalf("Get failed: %v %v", v, err)
+	}
+
+	// Get cached
+	v, err = lm.Get("one", nil)
+	if err != nil || v != 1 {
+		t.Fatalf("Get cached failed: %v %v", v, err)
+	}
+
+	// Set
+	lm.Set("two", 2)
+	v, err = lm.Get("two", nil)
+	if err != nil || v != 2 {
+		t.Fatalf("Set failed: %v %v", v, err)
+	}
+
+	// Remove
+	lm.Remove("two")
+	v, err = lm.Get("two", nil, lazy.DontFetch[string, int]())
+	if err != nil || v != 0 {
+		t.Fatalf("Remove failed: %v %v", v, err)
 	}
 }
