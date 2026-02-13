@@ -5,9 +5,10 @@ The `lazy` package provides generic, thread-safe primitives for lazy evaluation 
 ## Features
 
 - **Thread-Safe**: Uses `sync.Once` and atomic operations to ensure values are initialized exactly once, even under concurrent access.
-- **Generics**: Fully supports Go generics for type safety.
+- **Generics**: Fully supports Go generics for type safety (`Map[K, V]`).
 - **Flexible Mapping**: Includes a helper for managing lazily loaded values in a map.
 - **Configurable**: extensive options for controlling fetch behavior (timeouts, defaults, forced refreshes, etc.).
+- **Eviction Policies**: Built-in support for multiple eviction policies (Random, LRU, LFU, FIFO) and custom policy implementation.
 
 ## Usage
 
@@ -20,7 +21,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/arran4/goa4web/internal/lazy"
+	"github.com/arran4/go-be-lazy"
 )
 
 func main() {
@@ -46,42 +47,61 @@ func main() {
 
 ### Lazy Map
 
-The `Map` function provides a convenient way to manage a collection of lazy values, keyed by an integer ID (e.g., database IDs). It handles map locking and value initialization.
+The `LazyMap` struct provides a convenient way to manage a collection of lazy values, keyed by any comparable type (e.g., strings, integers). It handles map locking and value initialization.
 
 ```go
 package main
 
 import (
 	"fmt"
-	"sync"
-	"github.com/arran4/goa4web/internal/lazy"
+	"github.com/arran4/go-be-lazy"
 )
 
 func main() {
-	// The map that holds the cache.
-	cache := make(map[int32]*lazy.Value[string])
-	var mu sync.Mutex
+	// Create a new LazyMap with string keys and int values.
+	cache := lazy.NewLazyMap[string, int]()
 
-	fetchUser := func(id int32) (string, error) {
-		fmt.Printf("Fetching user %d\n", id)
-		return fmt.Sprintf("User-%d", id), nil
+	fetchUserAge := func(name string) (int, error) {
+		fmt.Printf("Fetching age for %s\n", name)
+		return len(name) * 10, nil // Dummy logic
 	}
 
-	// Fetch user 1 (will trigger fetch)
-	u1, err := lazy.Map(&cache, &mu, 1, fetchUser)
+	// Fetch age for "Alice" (will trigger fetch)
+	age1, err := cache.Get("Alice", fetchUserAge)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(u1)
+	fmt.Println(age1) // Output: 50
 
-	// Fetch user 1 again (will use cache)
-	u1Cached, _ := lazy.Map(&cache, &mu, 1, fetchUser)
-	fmt.Println(u1Cached)
+	// Fetch age for "Alice" again (will use cache)
+	ageCached, _ := cache.Get("Alice", fetchUserAge)
+	fmt.Println(ageCached) // Output: 50
 
 	// Options can modify behavior, e.g., force refresh
-	u1Refreshed, _ := lazy.Map(&cache, &mu, 1, fetchUser, lazy.Refresh[string]())
-	fmt.Println(u1Refreshed)
+	ageRefreshed, _ := cache.Get("Alice", fetchUserAge, lazy.Refresh[string, int]())
+	fmt.Println(ageRefreshed)
 }
+```
+
+### Eviction Policies
+
+You can specify an eviction policy using `WithEvictionPolicy`. The library provides several implementations:
+
+*   `RandomEvictionPolicy`: Uses Go's map iteration order (default).
+*   `LRUEvictionPolicy`: Least Recently Used eviction.
+*   `LFUEvictionPolicy`: Least Frequently Used eviction.
+*   `FIFOEvictionPolicy`: First-In-First-Out eviction.
+*   `NoEvictionPolicy`: No eviction (MaxSize is effectively ignored).
+
+```go
+// Create an LRU policy
+lru := lazy.NewLRUEvictionPolicy[string, int]()
+
+// Use it with MaxSize
+cache.Get("Bob", fetchUserAge,
+    lazy.MaxSize[string, int](100),
+    lazy.WithEvictionPolicy[string, int](lru),
+)
 ```
 
 ## API Overview
@@ -89,11 +109,14 @@ func main() {
 ### Types
 
 - `Value[T]`: The core struct for lazy loading. Zero value is ready to use.
-- `Option[T]`: Functional options for `Map`.
+- `LazyMap[K, V]`: A thread-safe map wrapper for lazy values.
+- `Option[K, V]`: Functional options for `Map` and `LazyMap`.
+- `EvictionPolicy[K, V]`: Interface for custom eviction strategies.
 
 ### Functions
 
-- `Map`: manages looking up, creating, and loading values in a map.
+- `Map`: Lower-level function for managing lazy values in a raw map.
+- `NewLazyMap`: Creates a `LazyMap` instance.
 
 ### Options for Map
 
@@ -105,11 +128,15 @@ func main() {
 - `Must`: Wraps errors from the fetch function.
 - `MustBeCached`: Returns an error if the value is not already cached.
 - `DefaultValue`: Returns this value if lookup fails or (optionally) if fetch fails.
+- `MaxSize`: Limits the size of the map, triggering eviction based on the policy.
+- `WithEvictionPolicy`: Sets the eviction strategy.
 
 ## Thread Safety
 
 - **Value[T]**: `Load`, `Set`, and `Peek` are safe for concurrent use. `Load` guarantees the initialization function runs exactly once.
-- **Map**: Requires the caller to provide a `sync.Mutex` which it uses to protect map operations (insertion/deletion). The value loading itself happens outside the map lock to avoid blocking other lookups, utilizing the internal safety of `Value[T]`.
+- **LazyMap**: Wraps `Map` and handles mutex locking internally.
+- **Map**: Requires the caller to provide a `sync.Mutex` which it uses to protect map operations (insertion/deletion). The value loading itself happens outside the map lock to avoid blocking other lookups.
+- **EvictionPolicy**: Implementations provided (`LRU`, `LFU`, `FIFO`, `Random`) are thread-safe for concurrent access.
 
 ## License
 
