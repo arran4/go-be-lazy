@@ -81,17 +81,29 @@ func (l *Value[T]) Peek() (T, bool) {
 }
 
 // EvictionPolicy defines the strategy for removing items when the map reaches MaxSize.
-type EvictionPolicy int
+// Implementations must be thread-safe for Access if they maintain state and are used concurrently.
+type EvictionPolicy[K comparable, V any] interface {
+	// Access is called when a key is accessed (read or written).
+	// This is called outside the map mutex, so implementations must handle concurrency.
+	Access(key K)
+	// SelectVictim returns the key that should be evicted.
+	// It is passed the map in case it needs to inspect it.
+	// This is called while the map mutex is held.
+	SelectVictim(m map[K]*Value[V]) (K, bool)
+}
 
-const (
-	// EvictionPolicyRandom removes an item based on Go's map iteration order.
-	// This is the default policy. It effectively removes a pseudo-random item.
-	EvictionPolicyRandom EvictionPolicy = iota
-	// EvictionPolicyRangeFirst removes the first item encountered during map iteration.
-	// Since Go map iteration is randomized, this behaves similarly to EvictionPolicyRandom
-	// but is explicit in its implementation approach.
-	EvictionPolicyRangeFirst
-)
+// RandomEvictionPolicy implements EvictionPolicy using Go's map iteration order.
+type RandomEvictionPolicy[K comparable, V any] struct{}
+
+func (p *RandomEvictionPolicy[K, V]) Access(key K) {}
+
+func (p *RandomEvictionPolicy[K, V]) SelectVictim(m map[K]*Value[V]) (K, bool) {
+	for k := range m {
+		return k, true
+	}
+	var zero K
+	return zero, false
+}
 
 // args holds the configuration for Map operations.
 type args[K comparable, V any] struct {
@@ -104,7 +116,7 @@ type args[K comparable, V any] struct {
 	setValue       *V
 	defaultValue   *V
 	maxSize        int
-	evictionPolicy EvictionPolicy
+	evictionPolicy EvictionPolicy[K, V]
 }
 
 // Option configures the behavior of the Map function.
@@ -144,13 +156,13 @@ func DefaultValue[K comparable, V any](v V) Option[K, V] {
 
 // MaxSize returns an Option that limits the size of the map.
 // If the map reaches the specified size, adding a new item will cause an existing item to be evicted.
-// The default eviction policy is EvictionPolicyRandom.
+// The default eviction policy is RandomEvictionPolicy.
 func MaxSize[K comparable, V any](size int) Option[K, V] {
 	return func(a *args[K, V]) { a.maxSize = size }
 }
 
 // WithEvictionPolicy returns an Option that specifies the eviction policy to use when MaxSize is reached.
-func WithEvictionPolicy[K comparable, V any](policy EvictionPolicy) Option[K, V] {
+func WithEvictionPolicy[K comparable, V any](policy EvictionPolicy[K, V]) Option[K, V] {
 	return func(a *args[K, V]) { a.evictionPolicy = policy }
 }
 
@@ -192,16 +204,13 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 	lv, ok := (*m)[id]
 	if !ok || args.refresh {
 		if !ok && args.maxSize > 0 && len(*m) >= args.maxSize {
-			switch args.evictionPolicy {
-			case EvictionPolicyRandom, EvictionPolicyRangeFirst:
-				// Go's map iteration is random, so taking the "first" key
-				// from the range loop is effectively random eviction.
-				for k := range *m {
-					delete(*m, k)
-					break
+			if args.evictionPolicy != nil {
+				victim, found := args.evictionPolicy.SelectVictim(*m)
+				if found {
+					delete(*m, victim)
 				}
-			default:
-				// Fallback to random/range if policy is unknown
+			} else {
+				// Fallback to random/range if policy is unknown/nil
 				for k := range *m {
 					delete(*m, k)
 					break
@@ -215,11 +224,17 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 
 	if args.setValue != nil {
 		lv.Set(*args.setValue)
+		if args.evictionPolicy != nil {
+			args.evictionPolicy.Access(id)
+		}
 		return *args.setValue, nil
 	}
 
 	v, loaded := lv.Peek()
 	if loaded {
+		if args.evictionPolicy != nil {
+			args.evictionPolicy.Access(id)
+		}
 		return v, nil
 	}
 
@@ -241,12 +256,20 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 	if err != nil {
 		if args.defaultValue != nil && !args.must {
 			lv.store(*args.defaultValue)
+			// Should we consider default value access? Yes.
+			if args.evictionPolicy != nil {
+				args.evictionPolicy.Access(id)
+			}
 			return *args.defaultValue, nil
 		}
 		if args.must {
 			return v, fmt.Errorf("fetch error: %w", err)
 		}
 		return v, err
+	}
+	// Successful load
+	if args.evictionPolicy != nil {
+		args.evictionPolicy.Access(id)
 	}
 	return v, nil
 }

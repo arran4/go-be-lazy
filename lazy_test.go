@@ -234,18 +234,18 @@ func TestMapBoundedGrowth(t *testing.T) {
 }
 
 func TestMapEvictionPolicy(t *testing.T) {
-	// Since Random and RangeFirst are currently effectively the same,
-	// we just test that eviction happens.
+	// Use RandomEvictionPolicy explicitly
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
 	fetch := func(id int32) (int, error) { return int(id), nil }
 
 	limit := 50
 	maxSize := 10
+	policy := &lazy.RandomEvictionPolicy[int32, int]{}
 	for i := 0; i < limit; i++ {
 		_, err := lazy.Map(&m, &mu, int32(i), fetch,
 			lazy.MaxSize[int32, int](maxSize),
-			lazy.WithEvictionPolicy[int32, int](lazy.EvictionPolicyRangeFirst))
+			lazy.WithEvictionPolicy[int32, int](policy))
 		if err != nil {
 			t.Fatalf("Map failed: %v", err)
 		}
@@ -253,6 +253,74 @@ func TestMapEvictionPolicy(t *testing.T) {
 
 	if len(m) != maxSize {
 		t.Fatalf("Expected map size %d, got %d", maxSize, len(m))
+	}
+}
+
+// MockEvictionPolicy for testing stateful policy hooks
+type MockEvictionPolicy struct {
+	accessCount int
+	evictCount  int
+}
+
+func (p *MockEvictionPolicy) Access(key int32) {
+	p.accessCount++
+}
+
+func (p *MockEvictionPolicy) SelectVictim(m map[int32]*lazy.Value[int]) (int32, bool) {
+	p.evictCount++
+	// Evict the first one found
+	for k := range m {
+		return k, true
+	}
+	return 0, false
+}
+
+func TestMapStatefulEvictionPolicy(t *testing.T) {
+	m := make(map[int32]*lazy.Value[int])
+	var mu sync.Mutex
+	fetch := func(id int32) (int, error) { return int(id), nil }
+	policy := &MockEvictionPolicy{}
+
+	// 1. Add item 1
+	lazy.Map(&m, &mu, 1, fetch,
+		lazy.MaxSize[int32, int](2),
+		lazy.WithEvictionPolicy[int32, int](policy))
+
+	if policy.accessCount != 1 {
+		t.Fatalf("Access count expected 1, got %d", policy.accessCount)
+	}
+
+	// 2. Access item 1 again (cached)
+	lazy.Map(&m, &mu, 1, fetch,
+		lazy.MaxSize[int32, int](2),
+		lazy.WithEvictionPolicy[int32, int](policy))
+
+	if policy.accessCount != 2 {
+		t.Fatalf("Access count expected 2, got %d", policy.accessCount)
+	}
+
+	// 3. Add item 2
+	lazy.Map(&m, &mu, 2, fetch,
+		lazy.MaxSize[int32, int](2),
+		lazy.WithEvictionPolicy[int32, int](policy))
+
+	if policy.accessCount != 3 {
+		t.Fatalf("Access count expected 3, got %d", policy.accessCount)
+	}
+	if policy.evictCount != 0 {
+		t.Fatalf("Evict count expected 0, got %d", policy.evictCount)
+	}
+
+	// 4. Add item 3 (trigger eviction)
+	lazy.Map(&m, &mu, 3, fetch,
+		lazy.MaxSize[int32, int](2),
+		lazy.WithEvictionPolicy[int32, int](policy))
+
+	if policy.evictCount != 1 {
+		t.Fatalf("Evict count expected 1, got %d", policy.evictCount)
+	}
+	if len(m) != 2 {
+		t.Fatalf("Map size expected 2, got %d", len(m))
 	}
 }
 
