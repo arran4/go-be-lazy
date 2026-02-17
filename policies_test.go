@@ -10,7 +10,7 @@ import (
 
 func TestLRUEvictionPolicy(t *testing.T) {
 	m := make(map[int]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int) (int, error) { return id, nil }
 	policy := lazy.NewLRUEvictionPolicy[int, int]()
 
@@ -38,7 +38,7 @@ func TestLRUEvictionPolicy(t *testing.T) {
 
 func TestFIFOEvictionPolicy(t *testing.T) {
 	m := make(map[int]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int) (int, error) { return id, nil }
 	policy := lazy.NewFIFOEvictionPolicy[int, int]()
 
@@ -66,7 +66,7 @@ func TestFIFOEvictionPolicy(t *testing.T) {
 
 func TestLFUEvictionPolicy(t *testing.T) {
 	m := make(map[int]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int) (int, error) { return id, nil }
 	policy := lazy.NewLFUEvictionPolicy[int, int]()
 
@@ -101,7 +101,7 @@ func TestLFUEvictionPolicy(t *testing.T) {
 
 func TestEvictionPolicyConcurrency(t *testing.T) {
 	m := make(map[int]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int) (int, error) { return id, nil }
 
 	// Test LRU concurrency
@@ -125,7 +125,7 @@ func TestEvictionPolicyConcurrency(t *testing.T) {
 
 func TestNoEvictionPolicy(t *testing.T) {
 	m := make(map[int]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int) (int, error) { return id, nil }
 	policy := &lazy.NoEvictionPolicy[int, int]{}
 
