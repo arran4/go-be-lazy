@@ -152,7 +152,7 @@ func WithEvictionPolicy[K comparable, V any](policy EvictionPolicy[K, V]) Option
 //   - opts: Optional modifiers.
 //
 // Returns the value and any error encountered.
-func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch func(K) (V, error), opts ...Option[K, V]) (V, error) {
+func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.RWMutex, id K, fetch func(K) (V, error), opts ...Option[K, V]) (V, error) {
 	var zero V
 	args := &args[K, V]{}
 	for _, opt := range opts {
@@ -167,6 +167,24 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 	if mu == nil {
 		return zero, ErrMapMutexNil
 	}
+
+	var lv *Value[V]
+
+	mu.RLock()
+	if args.clear {
+		mu.RUnlock()
+		goto WriteLock
+	}
+	if *m != nil {
+		if val, ok := (*m)[id]; ok && !args.refresh {
+			lv = val
+			mu.RUnlock()
+			goto ProcessValue
+		}
+	}
+	mu.RUnlock()
+
+WriteLock:
 	mu.Lock()
 	if *m == nil {
 		*m = make(map[K]*Value[V])
@@ -176,8 +194,9 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 		mu.Unlock()
 		return zero, nil
 	}
-	lv, ok := (*m)[id]
-	if !ok || args.refresh {
+	if val, ok := (*m)[id]; ok && !args.refresh {
+		lv = val
+	} else {
 		if !ok && args.maxSize > 0 && len(*m) >= args.maxSize {
 			if args.evictionPolicy != nil {
 				victim, found := args.evictionPolicy.SelectVictim(*m)
@@ -197,6 +216,7 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 	}
 	mu.Unlock()
 
+ProcessValue:
 	if args.setValue != nil {
 		lv.Set(*args.setValue)
 		if args.evictionPolicy != nil {
@@ -251,7 +271,7 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.Mutex, id K, fetch fu
 
 // LazyMap manages a collection of lazy values with a built-in mutex.
 type LazyMap[K comparable, V any] struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	m    map[K]*Value[V]
 	opts []Option[K, V]
 }

@@ -62,7 +62,7 @@ func TestValueSetPeek(t *testing.T) {
 }
 
 func TestMapNilMap(t *testing.T) {
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	_, err := lazy.Map[int, int](nil, &mu, 1, nil)
 	if err == nil {
 		t.Fatal("expected error")
@@ -76,7 +76,7 @@ func TestMapFetchCaching(t *testing.T) {
 		calls++
 		return int(id * 2), nil
 	}
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	v := must(lazy.Map(&m, &mu, 1, fetch))
 	if v != 2 {
 		t.Fatalf("got %v", v)
@@ -89,7 +89,7 @@ func TestMapFetchCaching(t *testing.T) {
 
 func TestMapDontFetchMustCached(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	_, err := lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int32, int](), lazy.MustBeCached[int32, int]())
 	if err == nil {
 		t.Fatal("expected error")
@@ -98,7 +98,7 @@ func TestMapDontFetchMustCached(t *testing.T) {
 
 func TestMapDontFetchDefaultValue(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	v, err := lazy.Map(&m, &mu, 5, nil, lazy.DontFetch[int32, int](), lazy.DefaultValue[int32, int](42))
 	if err != nil || v != 42 {
 		t.Fatalf("got %v %v", v, err)
@@ -110,7 +110,7 @@ func TestMapDontFetchDefaultValue(t *testing.T) {
 
 func TestMapMustWrapError(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	_, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 0, errors.New("bad") }, lazy.Must[int32, int]())
 	if err == nil || err.Error() != "fetch error: bad" {
 		t.Fatalf("err=%v", err)
@@ -119,7 +119,7 @@ func TestMapMustWrapError(t *testing.T) {
 
 func TestMapDefaultValueOnError(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	v, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 0, errors.New("bad") }, lazy.DefaultValue[int32, int](5))
 	if err != nil || v != 5 {
 		t.Fatalf("got %v %v", v, err)
@@ -128,7 +128,7 @@ func TestMapDefaultValueOnError(t *testing.T) {
 
 func TestMapClear(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	if _, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 1, nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestMapRefresh(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	calls := 0
 	fetch := func(int32) (int, error) { calls++; return calls, nil }
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	v := must(lazy.Map(&m, &mu, 1, fetch))
 	if v != 1 {
 		t.Fatalf("first=%d", v)
@@ -160,7 +160,7 @@ func TestMapRefresh(t *testing.T) {
 
 func TestMapSet(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	v, err := lazy.Map(&m, &mu, 1, nil, lazy.Set[int32, int](7))
 	if err != nil || v != 7 {
 		t.Fatalf("set %v %v", v, err)
@@ -175,7 +175,7 @@ func TestMapSetID(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var calls int
 	fetch := func(id int32) (int, error) { calls++; return int(id), nil }
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	v, err := lazy.Map(&m, &mu, 1, fetch, lazy.SetID[int32, int](2))
 	if err != nil || v != 2 {
 		t.Fatalf("got %v %v", v, err)
@@ -193,7 +193,7 @@ func TestMapSetID(t *testing.T) {
 
 func TestMapConcurrent(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	calls := 0
 	fetch := func(id int32) (int, error) {
 		mu.Lock()
@@ -219,7 +219,7 @@ func TestMapConcurrent(t *testing.T) {
 
 func TestMapBoundedGrowth(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int32) (int, error) { return int(id), nil }
 
 	// Simulate adding many items with MaxSize
@@ -240,7 +240,7 @@ func TestMapBoundedGrowth(t *testing.T) {
 func TestMapEvictionPolicy(t *testing.T) {
 	// Use RandomEvictionPolicy explicitly
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int32) (int, error) { return int(id), nil }
 
 	limit := 50
@@ -281,7 +281,7 @@ func (p *MockEvictionPolicy) SelectVictim(m map[int32]*lazy.Value[int]) (int32, 
 
 func TestMapStatefulEvictionPolicy(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(id int32) (int, error) { return int(id), nil }
 	policy := &MockEvictionPolicy{}
 
@@ -338,7 +338,7 @@ func TestMapStatefulEvictionPolicy(t *testing.T) {
 
 func TestMapDefaultValueCachingBug(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 
 	// First call: fetch fails, should return default value and cache it
 	v, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) {
@@ -367,7 +367,7 @@ func TestMapDefaultValueCachingBug(t *testing.T) {
 
 func TestMapStringKeys(t *testing.T) {
 	m := make(map[string]*lazy.Value[string])
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	fetch := func(key string) (string, error) {
 		return "val:" + key, nil
 	}
