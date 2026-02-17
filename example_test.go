@@ -45,15 +45,15 @@ func ExampleLazyMap_withEviction() {
 
 	// Add items. MaxSize is 2.
 	// A: [A]
-	cache.Get("A", fetch)
+	_, _ = cache.Get("A", fetch)
 	// B: [B, A]
-	cache.Get("B", fetch)
+	_, _ = cache.Get("B", fetch)
 
 	// Access A: [A, B]
-	cache.Get("A", fetch)
+	_, _ = cache.Get("A", fetch)
 
 	// Add C: [C, A]. B is evicted.
-	cache.Get("C", fetch)
+	_, _ = cache.Get("C", fetch)
 
 	_, errA := cache.Get("A", nil, lazy.DontFetch[string, int]())
 	_, errB := cache.Get("B", nil, lazy.DontFetch[string, int](), lazy.MustBeCached[string, int]())
