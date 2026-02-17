@@ -283,7 +283,7 @@ func (lm *LazyMap[K, V]) Set(key K, value V) {
 	combinedOpts := make([]Option[K, V], 0, len(lm.opts)+1)
 	combinedOpts = append(combinedOpts, lm.opts...)
 	combinedOpts = append(combinedOpts, Set[K, V](value))
-	Map(&lm.m, &lm.mu, key, nil, combinedOpts...)
+	_, _ = Map(&lm.m, &lm.mu, key, nil, combinedOpts...)
 }
 
 // Remove removes the value associated with the key.
@@ -291,5 +291,5 @@ func (lm *LazyMap[K, V]) Remove(key K) {
 	combinedOpts := make([]Option[K, V], 0, len(lm.opts)+1)
 	combinedOpts = append(combinedOpts, lm.opts...)
 	combinedOpts = append(combinedOpts, Clear[K, V]())
-	Map(&lm.m, &lm.mu, key, nil, combinedOpts...)
+	_, _ = Map(&lm.m, &lm.mu, key, nil, combinedOpts...)
 }

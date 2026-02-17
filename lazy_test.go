@@ -129,8 +129,12 @@ func TestMapDefaultValueOnError(t *testing.T) {
 func TestMapClear(t *testing.T) {
 	m := make(map[int32]*lazy.Value[int])
 	var mu sync.Mutex
-	lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 1, nil })
-	lazy.Map(&m, &mu, 1, nil, lazy.Clear[int32, int]())
+	if _, err := lazy.Map(&m, &mu, 1, func(int32) (int, error) { return 1, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lazy.Map(&m, &mu, 1, nil, lazy.Clear[int32, int]()); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := m[1]; ok {
 		t.Fatal("value not cleared")
 	}
@@ -282,27 +286,33 @@ func TestMapStatefulEvictionPolicy(t *testing.T) {
 	policy := &MockEvictionPolicy{}
 
 	// 1. Add item 1
-	lazy.Map(&m, &mu, 1, fetch,
+	if _, err := lazy.Map(&m, &mu, 1, fetch,
 		lazy.MaxSize[int32, int](2),
-		lazy.WithEvictionPolicy[int32, int](policy))
+		lazy.WithEvictionPolicy[int32, int](policy)); err != nil {
+		t.Fatal(err)
+	}
 
 	if policy.accessCount != 1 {
 		t.Fatalf("Access count expected 1, got %d", policy.accessCount)
 	}
 
 	// 2. Access item 1 again (cached)
-	lazy.Map(&m, &mu, 1, fetch,
+	if _, err := lazy.Map(&m, &mu, 1, fetch,
 		lazy.MaxSize[int32, int](2),
-		lazy.WithEvictionPolicy[int32, int](policy))
+		lazy.WithEvictionPolicy[int32, int](policy)); err != nil {
+		t.Fatal(err)
+	}
 
 	if policy.accessCount != 2 {
 		t.Fatalf("Access count expected 2, got %d", policy.accessCount)
 	}
 
 	// 3. Add item 2
-	lazy.Map(&m, &mu, 2, fetch,
+	if _, err := lazy.Map(&m, &mu, 2, fetch,
 		lazy.MaxSize[int32, int](2),
-		lazy.WithEvictionPolicy[int32, int](policy))
+		lazy.WithEvictionPolicy[int32, int](policy)); err != nil {
+		t.Fatal(err)
+	}
 
 	if policy.accessCount != 3 {
 		t.Fatalf("Access count expected 3, got %d", policy.accessCount)
@@ -312,9 +322,11 @@ func TestMapStatefulEvictionPolicy(t *testing.T) {
 	}
 
 	// 4. Add item 3 (trigger eviction)
-	lazy.Map(&m, &mu, 3, fetch,
+	if _, err := lazy.Map(&m, &mu, 3, fetch,
 		lazy.MaxSize[int32, int](2),
-		lazy.WithEvictionPolicy[int32, int](policy))
+		lazy.WithEvictionPolicy[int32, int](policy)); err != nil {
+		t.Fatal(err)
+	}
 
 	if policy.evictCount != 1 {
 		t.Fatalf("Evict count expected 1, got %d", policy.evictCount)
