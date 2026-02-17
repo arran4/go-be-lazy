@@ -15,15 +15,23 @@ func TestLRUEvictionPolicy(t *testing.T) {
 	policy := lazy.NewLRUEvictionPolicy[int, int]()
 
 	// 1: Add 1. LRU: [1]
-	lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 	// 2: Add 2. LRU: [2, 1]
-	lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Access 1. LRU: [1, 2]
-	lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Add 3. Should evict 2. LRU: [3, 1]
-	lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	if _, ok := m[2]; ok {
 		t.Fatal("Expected 2 to be evicted")
@@ -43,15 +51,23 @@ func TestFIFOEvictionPolicy(t *testing.T) {
 	policy := lazy.NewFIFOEvictionPolicy[int, int]()
 
 	// Add 1. FIFO: [1]
-	lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 	// Add 2. FIFO: [1, 2]
-	lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Access 1. FIFO order shouldn't change on access.
-	lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Add 3. Should evict 1 (First In).
-	lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	if _, ok := m[1]; ok {
 		t.Fatal("Expected 1 to be evicted")
@@ -71,22 +87,34 @@ func TestLFUEvictionPolicy(t *testing.T) {
 	policy := lazy.NewLFUEvictionPolicy[int, int]()
 
 	// Add 1. Freqs: {1:1}
-	lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 	// Add 2. Freqs: {1:1, 2:1}
-	lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Access 1 twice more. Freqs: {1:3, 2:1}
-	lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int, int](), lazy.WithEvictionPolicy[int, int](policy))
-	lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int, int](), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int, int](), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
+	if _, err := lazy.Map(&m, &mu, 1, nil, lazy.DontFetch[int, int](), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Access 2 once more. Freqs: {1:3, 2:2}
-	lazy.Map(&m, &mu, 2, nil, lazy.DontFetch[int, int](), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 2, nil, lazy.DontFetch[int, int](), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	// Add 3. Should evict 2 (Freq 2 < Freq 3).
 	// Currently map has {1, 2}. MaxSize is 2. We need to evict.
 	// 1 has freq 3. 2 has freq 2.
 	// Victim is 2.
-	lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	if _, ok := m[2]; ok {
 		t.Fatalf("Expected 2 to be evicted. Map: %v", m)
@@ -113,7 +141,9 @@ func TestEvictionPolicyConcurrency(t *testing.T) {
 			defer wg.Done()
 			// Randomly access keys 0-9
 			key := rand.Intn(10)
-			lazy.Map(&m, &mu, key, fetch, lazy.MaxSize[int, int](5), lazy.WithEvictionPolicy[int, int](policy))
+			if _, err := lazy.Map(&m, &mu, key, fetch, lazy.MaxSize[int, int](5), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+				t.Error(err)
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -130,9 +160,15 @@ func TestNoEvictionPolicy(t *testing.T) {
 	policy := &lazy.NoEvictionPolicy[int, int]{}
 
 	// Add 3 items with MaxSize 2.
-	lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
-	lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
-	lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy))
+	if _, err := lazy.Map(&m, &mu, 1, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
+	if _, err := lazy.Map(&m, &mu, 2, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
+	if _, err := lazy.Map(&m, &mu, 3, fetch, lazy.MaxSize[int, int](2), lazy.WithEvictionPolicy[int, int](policy)); err != nil {
+		t.Fatalf("lazy.Map failed: %v", err)
+	}
 
 	if len(m) != 3 {
 		t.Fatalf("Expected map size 3 (no eviction), got %d", len(m))
