@@ -255,3 +255,56 @@ func TestExpireContext(t *testing.T) {
 		t.Errorf("expected 2 fetches, got %d", fetchCount)
 	}
 }
+
+func TestExpiryCallback(t *testing.T) {
+	var mu sync.RWMutex
+	m := make(map[string]*Value[int])
+
+	var expiredKey string
+	var expiredValue int
+	var callbackCalled bool
+
+	callback := func(k string, v int) {
+		expiredKey = k
+		expiredValue = v
+		callbackCalled = true
+	}
+
+	opts := []Option[string, int]{
+		WithExpiry[string, int](ExpireAfterUses[int](1)),
+		WithExpiryCallback[string, int](callback),
+	}
+
+	fetch := func(k string) (int, error) {
+		return 123, nil
+	}
+
+	// 1. Fetch (Load)
+	val, err := Map(&m, &mu, "key", fetch, opts...)
+	if err != nil || val != 123 {
+		t.Fatalf("Fetch failed: %v %v", val, err)
+	}
+
+	if callbackCalled {
+		t.Fatal("Callback called prematurely")
+	}
+
+	// 2. Fetch (Cached) - This triggers expiration because Limit=1.
+	// After first fetch, Uses=1. IsExpired -> true.
+	// So this call will find it expired, trigger callback, delete, and reload.
+
+	val, err = Map(&m, &mu, "key", fetch, opts...)
+	if err != nil || val != 123 {
+		t.Fatalf("Second fetch failed: %v %v", val, err)
+	}
+
+	if !callbackCalled {
+		t.Fatal("Callback was not called")
+	}
+	if expiredKey != "key" {
+		t.Errorf("Expected key 'key', got '%s'", expiredKey)
+	}
+	if expiredValue != 123 {
+		t.Errorf("Expected value 123, got %d", expiredValue)
+	}
+}

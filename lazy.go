@@ -131,6 +131,7 @@ type args[K comparable, V any] struct {
 	maxSize        int
 	evictionPolicy EvictionPolicy[K, V]
 	expiry         Expiry[V]
+	expiryCallback func(K, V)
 }
 
 // Option configures the behavior of the Map function.
@@ -185,6 +186,11 @@ func WithExpiry[K comparable, V any](policy Expiry[V]) Option[K, V] {
 	return func(a *args[K, V]) { a.expiry = policy }
 }
 
+// WithExpiryCallback returns an Option that specifies a callback to be called when a value expires.
+func WithExpiryCallback[K comparable, V any](callback func(K, V)) Option[K, V] {
+	return func(a *args[K, V]) { a.expiryCallback = callback }
+}
+
 // Map retrieves or creates a lazy Value in the provided map.
 // It handles locking the map using the provided mutex.
 //
@@ -213,6 +219,7 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.RWMutex, id K, fetch 
 	}
 
 	var lv *Value[V]
+	var onExpire func()
 
 	mu.RLock()
 	if args.clear {
@@ -248,6 +255,10 @@ WriteLock:
 			expired = true
 		}
 		if expired {
+			if args.expiryCallback != nil {
+				v, _, _ := val.Value()
+				onExpire = func() { args.expiryCallback(id, v) }
+			}
 			delete(*m, id)
 			lv = &Value[V]{}
 			(*m)[id] = lv
@@ -273,6 +284,10 @@ WriteLock:
 		(*m)[id] = lv
 	}
 	mu.Unlock()
+
+	if onExpire != nil {
+		onExpire()
+	}
 
 ProcessValue:
 	if args.setValue != nil {
