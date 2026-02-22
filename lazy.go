@@ -26,9 +26,10 @@ var (
 // even if accessed concurrently.
 // It uses atomic.Value and sync.Mutex for synchronization.
 type Value[T any] struct {
-	val  atomic.Value
-	mu   sync.Mutex
-	uses atomic.Int64
+	val      atomic.Value
+	mu       sync.Mutex
+	uses     atomic.Int64
+	canceled atomic.Bool
 }
 
 // Load ensures the value is loaded by executing fn if it hasn't been loaded yet.
@@ -118,6 +119,16 @@ func (l *Value[T]) IsLoaded() bool {
 	return l.val.Load() != nil
 }
 
+// Cancel marks the value as canceled.
+func (l *Value[T]) Cancel() {
+	l.canceled.Store(true)
+}
+
+// IsCanceled returns true if the value has been canceled.
+func (l *Value[T]) IsCanceled() bool {
+	return l.canceled.Load()
+}
+
 // args holds the configuration for Map operations.
 type args[K comparable, V any] struct {
 	dontFetch      bool
@@ -131,6 +142,7 @@ type args[K comparable, V any] struct {
 	maxSize        int
 	evictionPolicy EvictionPolicy[K, V]
 	expiry         Expiry[V]
+	cancelDest     *func()
 }
 
 // Option configures the behavior of the Map function.
@@ -183,6 +195,12 @@ func WithEvictionPolicy[K comparable, V any](policy EvictionPolicy[K, V]) Option
 // WithExpiry returns an Option that specifies the expiration policy for the value.
 func WithExpiry[K comparable, V any](policy Expiry[V]) Option[K, V] {
 	return func(a *args[K, V]) { a.expiry = policy }
+}
+
+// WithCancel returns an Option that provides a function to cancel the value.
+// Calling the returned function will purge the entry from the map and mark the value as canceled.
+func WithCancel[K comparable, V any](dest *func()) Option[K, V] {
+	return func(a *args[K, V]) { a.cancelDest = dest }
 }
 
 // Map retrieves or creates a lazy Value in the provided map.
@@ -275,6 +293,24 @@ WriteLock:
 	mu.Unlock()
 
 ProcessValue:
+	if args.cancelDest != nil {
+		*args.cancelDest = func() {
+			if lv != nil {
+				lv.Cancel()
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if *m == nil {
+				return
+			}
+			if val, ok := (*m)[id]; ok {
+				if val == lv {
+					delete(*m, id)
+				}
+			}
+		}
+	}
+
 	if args.setValue != nil {
 		lv.Set(*args.setValue)
 		if args.evictionPolicy != nil {

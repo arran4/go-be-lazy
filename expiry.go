@@ -20,6 +20,9 @@ type expireAt[V any] struct {
 }
 
 func (e *expireAt[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	return time.Now().After(e.t)
 }
 
@@ -33,6 +36,9 @@ type expireAfter[V any] struct {
 }
 
 func (e *expireAfter[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	createdAt := v.CreatedAt()
 	if createdAt.IsZero() {
 		return false
@@ -50,6 +56,9 @@ type expireAfterUses[V any] struct {
 }
 
 func (e *expireAfterUses[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	return v.Uses() >= e.n
 }
 
@@ -63,6 +72,9 @@ type expireAll[V any] struct {
 }
 
 func (e *expireAll[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	if len(e.policies) == 0 {
 		return false
 	}
@@ -84,6 +96,9 @@ type expireAny[V any] struct {
 }
 
 func (e *expireAny[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	for _, p := range e.policies {
 		if p.IsExpired(v) {
 			return true
@@ -100,6 +115,9 @@ func NeverExpires[V any]() Expiry[V] {
 type neverExpires[V any] struct{}
 
 func (e *neverExpires[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	return false
 }
 
@@ -113,6 +131,9 @@ type expireCustom[V any] struct {
 }
 
 func (e *expireCustom[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	if e.f == nil {
 		return false
 	}
@@ -129,5 +150,8 @@ type expireContext[V any] struct {
 }
 
 func (e *expireContext[V]) IsExpired(v *Value[V]) bool {
+	if v.IsCanceled() {
+		return true
+	}
 	return e.ctx.Err() != nil
 }

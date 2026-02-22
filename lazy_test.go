@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	lazy "github.com/arran4/go-be-lazy"
 )
@@ -411,5 +412,113 @@ func TestLazyMap(t *testing.T) {
 	v, err = lm.Get("two", nil, lazy.DontFetch[string, int]())
 	if err != nil || v != 0 {
 		t.Fatalf("Remove failed: %v %v", v, err)
+	}
+}
+
+func TestWithCancel(t *testing.T) {
+	m := make(map[string]*lazy.Value[int])
+	var mu sync.RWMutex
+	fetch := func(key string) (int, error) {
+		return 123, nil
+	}
+
+	var cancel func()
+	v, err := lazy.Map(&m, &mu, "key1", fetch, lazy.WithCancel[string, int](&cancel))
+	if err != nil {
+		t.Fatalf("Map failed: %v", err)
+	}
+	if v != 123 {
+		t.Fatalf("Expected 123, got %v", v)
+	}
+	if cancel == nil {
+		t.Fatal("cancel function was not populated")
+	}
+
+	// Verify entry exists
+	if _, ok := m["key1"]; !ok {
+		t.Fatal("Entry should exist before cancel")
+	}
+
+	// Cancel
+	cancel()
+
+	// Verify entry is gone (purged)
+	if _, ok := m["key1"]; ok {
+		t.Fatal("Entry should be purged after cancel")
+	}
+
+	// Verify refetch works
+	v, err = lazy.Map(&m, &mu, "key1", fetch)
+	if err != nil {
+		t.Fatalf("Refetch failed: %v", err)
+	}
+	if v != 123 {
+		t.Fatalf("Expected 123 on refetch, got %v", v)
+	}
+}
+
+func TestWithCancelExpiry(t *testing.T) {
+	// This test verifies that cancellation makes the value "expired" for policies
+	m := make(map[string]*lazy.Value[int])
+	var mu sync.RWMutex
+
+	// Use a long expiration time
+	policy := lazy.ExpireAfter[int](time.Hour)
+
+	var cancel func()
+	fetch := func(key string) (int, error) { return 456, nil }
+
+	_, _ = lazy.Map(&m, &mu, "key1", fetch, lazy.WithExpiry[string, int](policy), lazy.WithCancel[string, int](&cancel))
+
+	val := m["key1"]
+	if val == nil {
+		t.Fatal("Value should be in map")
+	}
+
+	if policy.IsExpired(val) {
+		t.Fatal("Should not be expired initially")
+	}
+
+	cancel()
+
+	// Check if the purged value is now considered expired
+	if !policy.IsExpired(val) {
+		t.Fatal("Value should be considered expired after cancel")
+	}
+}
+
+func TestWithCancelReplaced(t *testing.T) {
+	m := make(map[string]*lazy.Value[int])
+	var mu sync.RWMutex
+	fetch := func(key string) (int, error) { return 1, nil }
+
+	var cancel func()
+	v1, _ := lazy.Map(&m, &mu, "key", fetch, lazy.WithCancel[string, int](&cancel))
+	if v1 != 1 {
+		t.Fatal("expected 1")
+	}
+
+	// Simulate replacement
+	// We use Set to replace it, but Set only works if not loaded or new.
+	// So we clear first to force a new Value instance.
+	lazy.Map(&m, &mu, "key", nil, lazy.Clear[string, int]())
+	lazy.Map(&m, &mu, "key", nil, lazy.Set[string, int](2))
+
+	// Now m["key"] has value 2 (different Value instance)
+	v2, _ := lazy.Map(&m, &mu, "key", nil) // Peek
+	if v2 != 2 {
+		t.Fatal("expected 2")
+	}
+
+	// Call cancel from the first operation
+	cancel()
+
+	// Ensure m["key"] is still 2 and present
+	v3, err := lazy.Map(&m, &mu, "key", nil, lazy.DontFetch[string, int]())
+	if err != nil {
+		t.Fatalf("Value 2 should still be cached: %v", err)
+	}
+	if v3 != 2 {
+		t.Fatalf("Expected 2, got %v", v3)
 	}
 }
