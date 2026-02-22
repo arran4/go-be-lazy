@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // result holds the value and error for a lazy Value.
 type result[T any] struct {
-	value T
-	err   error
+	value     T
+	err       error
+	createdAt time.Time
 }
 
 var (
@@ -24,8 +26,9 @@ var (
 // even if accessed concurrently.
 // It uses atomic.Value and sync.Mutex for synchronization.
 type Value[T any] struct {
-	val atomic.Value
-	mu  sync.Mutex
+	val  atomic.Value
+	mu   sync.Mutex
+	uses atomic.Int64
 }
 
 // Load ensures the value is loaded by executing fn if it hasn't been loaded yet.
@@ -33,17 +36,20 @@ type Value[T any] struct {
 // Safe for concurrent use.
 func (l *Value[T]) Load(fn func() (T, error)) (T, error) {
 	if v := l.val.Load(); v != nil {
+		l.uses.Add(1)
 		r := v.(*result[T])
 		return r.value, r.err
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if v := l.val.Load(); v != nil {
+		l.uses.Add(1)
 		r := v.(*result[T])
 		return r.value, r.err
 	}
 	val, err := fn()
-	l.val.Store(&result[T]{value: val, err: err})
+	l.val.Store(&result[T]{value: val, err: err, createdAt: time.Now()})
+	l.uses.Add(1)
 	return val, err
 }
 
@@ -59,13 +65,13 @@ func (l *Value[T]) Set(v T) {
 	if l.val.Load() != nil {
 		return
 	}
-	l.val.Store(&result[T]{value: v, err: nil})
+	l.val.Store(&result[T]{value: v, err: nil, createdAt: time.Now()})
 }
 
 // Store forcibly sets the value, bypassing the "once" check.
 // This is used internally to overwrite an error state with a default value.
 func (l *Value[T]) Store(v T) {
-	l.val.Store(&result[T]{value: v, err: nil})
+	l.val.Store(&result[T]{value: v, err: nil, createdAt: time.Now()})
 }
 
 // Peek returns the cached value and true if it has been loaded.
@@ -73,11 +79,43 @@ func (l *Value[T]) Store(v T) {
 // Safe for concurrent use.
 func (l *Value[T]) Peek() (T, bool) {
 	if v := l.val.Load(); v != nil {
+		l.uses.Add(1)
 		r := v.(*result[T])
 		return r.value, true
 	}
 	var zero T
 	return zero, false
+}
+
+// CreatedAt returns the time when the value was loaded.
+// Returns zero time if not loaded.
+func (l *Value[T]) CreatedAt() time.Time {
+	if v := l.val.Load(); v != nil {
+		r := v.(*result[T])
+		return r.createdAt
+	}
+	return time.Time{}
+}
+
+// Uses returns the number of times the value has been accessed.
+func (l *Value[T]) Uses() int64 {
+	return l.uses.Load()
+}
+
+// Value returns the cached value, true if loaded, and error if any.
+// Unlike Peek or Load, this method does not increment the usage count.
+func (l *Value[T]) Value() (T, bool, error) {
+	if v := l.val.Load(); v != nil {
+		r := v.(*result[T])
+		return r.value, true, r.err
+	}
+	var zero T
+	return zero, false, nil
+}
+
+// IsLoaded returns true if the value has been loaded.
+func (l *Value[T]) IsLoaded() bool {
+	return l.val.Load() != nil
 }
 
 // args holds the configuration for Map operations.
@@ -92,6 +130,7 @@ type args[K comparable, V any] struct {
 	defaultValue   *V
 	maxSize        int
 	evictionPolicy EvictionPolicy[K, V]
+	expiry         Expiry[V]
 }
 
 // Option configures the behavior of the Map function.
@@ -141,6 +180,11 @@ func WithEvictionPolicy[K comparable, V any](policy EvictionPolicy[K, V]) Option
 	return func(a *args[K, V]) { a.evictionPolicy = policy }
 }
 
+// WithExpiry returns an Option that specifies the expiration policy for the value.
+func WithExpiry[K comparable, V any](policy Expiry[V]) Option[K, V] {
+	return func(a *args[K, V]) { a.expiry = policy }
+}
+
 // Map retrieves or creates a lazy Value in the provided map.
 // It handles locking the map using the provided mutex.
 //
@@ -177,6 +221,10 @@ func Map[K comparable, V any](m *map[K]*Value[V], mu *sync.RWMutex, id K, fetch 
 	}
 	if *m != nil {
 		if val, ok := (*m)[id]; ok && !args.refresh {
+			if args.expiry != nil && val.IsLoaded() && args.expiry.IsExpired(val) {
+				mu.RUnlock()
+				goto WriteLock
+			}
 			lv = val
 			mu.RUnlock()
 			goto ProcessValue
@@ -195,7 +243,17 @@ WriteLock:
 		return zero, nil
 	}
 	if val, ok := (*m)[id]; ok && !args.refresh {
-		lv = val
+		expired := false
+		if args.expiry != nil && val.IsLoaded() && args.expiry.IsExpired(val) {
+			expired = true
+		}
+		if expired {
+			delete(*m, id)
+			lv = &Value[V]{}
+			(*m)[id] = lv
+		} else {
+			lv = val
+		}
 	} else {
 		if !ok && args.maxSize > 0 && len(*m) >= args.maxSize {
 			if args.evictionPolicy != nil {
