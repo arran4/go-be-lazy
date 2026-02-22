@@ -9,7 +9,7 @@ import (
 	lazy "github.com/arran4/go-be-lazy"
 )
 
-func must[T any](v T, err error) T {
+func Must[T any](v T, err error) T {
 	if err != nil {
 		panic(fmt.Sprintf("Must failed: %v", err))
 	}
@@ -77,11 +77,11 @@ func TestMapFetchCaching(t *testing.T) {
 		return int(id * 2), nil
 	}
 	var mu sync.RWMutex
-	v := must(lazy.Map(&m, &mu, 1, fetch))
+	v := Must(lazy.Map(&m, &mu, 1, fetch))
 	if v != 2 {
 		t.Fatalf("got %v", v)
 	}
-	v = must(lazy.Map(&m, &mu, 1, fetch))
+	v = Must(lazy.Map(&m, &mu, 1, fetch))
 	if v != 2 || calls != 1 {
 		t.Fatalf("cached %v calls=%d", v, calls)
 	}
@@ -145,11 +145,11 @@ func TestMapRefresh(t *testing.T) {
 	calls := 0
 	fetch := func(int32) (int, error) { calls++; return calls, nil }
 	var mu sync.RWMutex
-	v := must(lazy.Map(&m, &mu, 1, fetch))
+	v := Must(lazy.Map(&m, &mu, 1, fetch))
 	if v != 1 {
 		t.Fatalf("first=%d", v)
 	}
-	v = must(lazy.Map(&m, &mu, 1, fetch, lazy.Refresh[int32, int]()))
+	v = Must(lazy.Map(&m, &mu, 1, fetch, lazy.Refresh[int32, int]()))
 	if v != 2 {
 		t.Fatalf("refresh=%d", v)
 	}
