@@ -415,36 +415,36 @@ func TestLazyMap(t *testing.T) {
 	}
 }
 
-func TestWithCancel(t *testing.T) {
+func TestWithRelease(t *testing.T) {
 	m := make(map[string]*lazy.Value[int])
 	var mu sync.RWMutex
 	fetch := func(key string) (int, error) {
 		return 123, nil
 	}
 
-	var cancel func()
-	v, err := lazy.Map(&m, &mu, "key1", fetch, lazy.WithCancel[string, int](&cancel))
+	var release func()
+	v, err := lazy.Map(&m, &mu, "key1", fetch, lazy.WithRelease[string, int](&release))
 	if err != nil {
 		t.Fatalf("Map failed: %v", err)
 	}
 	if v != 123 {
 		t.Fatalf("Expected 123, got %v", v)
 	}
-	if cancel == nil {
-		t.Fatal("cancel function was not populated")
+	if release == nil {
+		t.Fatal("release function was not populated")
 	}
 
 	// Verify entry exists
 	if _, ok := m["key1"]; !ok {
-		t.Fatal("Entry should exist before cancel")
+		t.Fatal("Entry should exist before release")
 	}
 
-	// Cancel
-	cancel()
+	// Release
+	release()
 
 	// Verify entry is gone (purged)
 	if _, ok := m["key1"]; ok {
-		t.Fatal("Entry should be purged after cancel")
+		t.Fatal("Entry should be purged after release")
 	}
 
 	// Verify refetch works
@@ -457,18 +457,18 @@ func TestWithCancel(t *testing.T) {
 	}
 }
 
-func TestWithCancelExpiry(t *testing.T) {
-	// This test verifies that cancellation makes the value "expired" for policies
+func TestWithReleaseExpiry(t *testing.T) {
+	// This test verifies that releasing makes the value "expired" for policies
 	m := make(map[string]*lazy.Value[int])
 	var mu sync.RWMutex
 
 	// Use a long expiration time
 	policy := lazy.ExpireAfter[int](time.Hour)
 
-	var cancel func()
+	var release func()
 	fetch := func(key string) (int, error) { return 456, nil }
 
-	_, _ = lazy.Map(&m, &mu, "key1", fetch, lazy.WithExpiry[string, int](policy), lazy.WithCancel[string, int](&cancel))
+	_, _ = lazy.Map(&m, &mu, "key1", fetch, lazy.WithExpiry[string, int](policy), lazy.WithRelease[string, int](&release))
 
 	val := m["key1"]
 	if val == nil {
@@ -479,21 +479,21 @@ func TestWithCancelExpiry(t *testing.T) {
 		t.Fatal("Should not be expired initially")
 	}
 
-	cancel()
+	release()
 
 	// Check if the purged value is now considered expired
 	if !policy.IsExpired(val) {
-		t.Fatal("Value should be considered expired after cancel")
+		t.Fatal("Value should be considered expired after release")
 	}
 }
 
-func TestWithCancelReplaced(t *testing.T) {
+func TestWithReleaseReplaced(t *testing.T) {
 	m := make(map[string]*lazy.Value[int])
 	var mu sync.RWMutex
 	fetch := func(key string) (int, error) { return 1, nil }
 
-	var cancel func()
-	v1, _ := lazy.Map(&m, &mu, "key", fetch, lazy.WithCancel[string, int](&cancel))
+	var release func()
+	v1, _ := lazy.Map(&m, &mu, "key", fetch, lazy.WithRelease[string, int](&release))
 	if v1 != 1 {
 		t.Fatal("expected 1")
 	}
@@ -510,8 +510,8 @@ func TestWithCancelReplaced(t *testing.T) {
 		t.Fatal("expected 2")
 	}
 
-	// Call cancel from the first operation
-	cancel()
+	// Call release from the first operation
+	release()
 
 	// Ensure m["key"] is still 2 and present
 	v3, err := lazy.Map(&m, &mu, "key", nil, lazy.DontFetch[string, int]())

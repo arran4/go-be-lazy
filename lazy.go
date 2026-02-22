@@ -29,7 +29,7 @@ type Value[T any] struct {
 	val      atomic.Value
 	mu       sync.Mutex
 	uses     atomic.Int64
-	canceled atomic.Bool
+	released atomic.Bool
 }
 
 // Load ensures the value is loaded by executing fn if it hasn't been loaded yet.
@@ -119,14 +119,14 @@ func (l *Value[T]) IsLoaded() bool {
 	return l.val.Load() != nil
 }
 
-// Cancel marks the value as canceled.
-func (l *Value[T]) Cancel() {
-	l.canceled.Store(true)
+// Release marks the value as released.
+func (l *Value[T]) Release() {
+	l.released.Store(true)
 }
 
-// IsCanceled returns true if the value has been canceled.
-func (l *Value[T]) IsCanceled() bool {
-	return l.canceled.Load()
+// IsReleased returns true if the value has been released.
+func (l *Value[T]) IsReleased() bool {
+	return l.released.Load()
 }
 
 // args holds the configuration for Map operations.
@@ -142,7 +142,7 @@ type args[K comparable, V any] struct {
 	maxSize        int
 	evictionPolicy EvictionPolicy[K, V]
 	expiry         Expiry[V]
-	cancelDest     *func()
+	releaseDest    *func()
 }
 
 // Option configures the behavior of the Map function.
@@ -197,10 +197,10 @@ func WithExpiry[K comparable, V any](policy Expiry[V]) Option[K, V] {
 	return func(a *args[K, V]) { a.expiry = policy }
 }
 
-// WithCancel returns an Option that provides a function to cancel the value.
-// Calling the returned function will purge the entry from the map and mark the value as canceled.
-func WithCancel[K comparable, V any](dest *func()) Option[K, V] {
-	return func(a *args[K, V]) { a.cancelDest = dest }
+// WithRelease returns an Option that provides a function to release the value.
+// Calling the returned function will purge the entry from the map and mark the value as released.
+func WithRelease[K comparable, V any](dest *func()) Option[K, V] {
+	return func(a *args[K, V]) { a.releaseDest = dest }
 }
 
 // Map retrieves or creates a lazy Value in the provided map.
@@ -293,10 +293,10 @@ WriteLock:
 	mu.Unlock()
 
 ProcessValue:
-	if args.cancelDest != nil {
-		*args.cancelDest = func() {
+	if args.releaseDest != nil {
+		*args.releaseDest = func() {
 			if lv != nil {
-				lv.Cancel()
+				lv.Release()
 			}
 			mu.Lock()
 			defer mu.Unlock()
