@@ -1,6 +1,7 @@
 package lazy
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -205,5 +206,52 @@ func TestLazyMapWithExpiry(t *testing.T) {
 
 	if count != 2 {
 		t.Errorf("Expected 2 fetches for LazyMap with ExpireAfterUses(1), got %d", count)
+	}
+}
+
+func TestExpireContext(t *testing.T) {
+	var mu sync.RWMutex
+	m := make(map[string]*Value[int])
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	opts := []Option[string, int]{
+		WithExpiry[string, int](ExpireContext[int](ctx)),
+	}
+
+	fetchCount := 0
+	fetch := func(k string) (int, error) {
+		fetchCount++
+		return fetchCount, nil
+	}
+
+	// First access
+	v, err := Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v != 1 {
+		t.Errorf("expected 1, got %d", v)
+	}
+
+	// Subsequent access (ctx active)
+	v, err = Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Errorf("expected 1 fetch, got %d", fetchCount)
+	}
+
+	// Cancel context
+	cancel()
+
+	// Subsequent access (ctx cancelled) -> Should refresh
+	v, err = Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 2 {
+		t.Errorf("expected 2 fetches, got %d", fetchCount)
 	}
 }

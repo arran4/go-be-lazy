@@ -9,6 +9,7 @@ The `lazy` package provides generic, thread-safe primitives for lazy evaluation 
 - **Flexible Mapping**: Includes a helper for managing lazily loaded values in a map.
 - **Configurable**: extensive options for controlling fetch behavior (timeouts, defaults, forced refreshes, etc.).
 - **Eviction Policies**: Built-in support for multiple eviction policies (Random, LRU, LFU, FIFO) and custom policy implementation.
+- **Expiration Policies**: Configure values to expire based on time, usage count, context cancellation, or custom logic.
 
 ## Usage
 
@@ -104,6 +105,30 @@ cache.Get("Bob", fetchUserAge,
 )
 ```
 
+### Expiration Policies
+
+You can specify an expiration policy using `WithExpiry`. The library provides several implementations:
+
+*   `ExpireAt`: Expires at a specific `time.Time`.
+*   `ExpireAfter`: Expires after a `time.Duration` from creation.
+*   `ExpireAfterUses`: Expires after `N` uses.
+*   `ExpireContext`: Expires when a `context.Context` is cancelled or times out.
+*   `ExpireAll`: Expires if **all** provided policies expire (AND).
+*   `ExpireAny`: Expires if **any** provided policy expires (OR).
+*   `ExpireCustom`: Custom expiration logic function.
+
+```go
+// Expire after 1 minute or 10 uses
+cache := lazy.NewLazyMap[string, int](
+    lazy.WithExpiry[string, int](
+        lazy.ExpireAny(
+            lazy.ExpireAfter[int](1 * time.Minute),
+            lazy.ExpireAfterUses[int](10),
+        ),
+    ),
+)
+```
+
 ## API Overview
 
 ### Types
@@ -112,6 +137,7 @@ cache.Get("Bob", fetchUserAge,
 - `LazyMap[K, V]`: A thread-safe map wrapper for lazy values.
 - `Option[K, V]`: Functional options for `Map` and `LazyMap`.
 - `EvictionPolicy[K, V]`: Interface for custom eviction strategies.
+- `Expiry[V]`: Interface for custom expiration strategies.
 
 ### Functions
 
@@ -130,6 +156,7 @@ cache.Get("Bob", fetchUserAge,
 - `DefaultValue`: Returns this value if lookup fails or (optionally) if fetch fails.
 - `MaxSize`: Limits the size of the map, triggering eviction based on the policy.
 - `WithEvictionPolicy`: Sets the eviction strategy.
+- `WithExpiry`: Sets the expiration strategy.
 
 ## Thread Safety
 
@@ -137,6 +164,7 @@ cache.Get("Bob", fetchUserAge,
 - **LazyMap**: Wraps `Map` and handles mutex locking internally.
 - **Map**: Requires the caller to provide a `sync.Mutex` which it uses to protect map operations (insertion/deletion). The value loading itself happens outside the map lock to avoid blocking other lookups.
 - **EvictionPolicy**: Implementations provided (`LRU`, `LFU`, `FIFO`, `Random`) are thread-safe for concurrent access.
+- **ExpirationPolicy**: Implementations provided are thread-safe.
 
 ## License
 

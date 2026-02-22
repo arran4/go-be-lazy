@@ -1,6 +1,7 @@
 package lazy
 
 import (
+	"context"
 	"time"
 )
 
@@ -116,4 +117,17 @@ func (e *expireCustom[V]) IsExpired(v *Value[V]) bool {
 		return false
 	}
 	return e.f(v)
+}
+
+// ExpireContext returns an Expiry policy that expires when the given context is cancelled or times out.
+func ExpireContext[V any](ctx context.Context) Expiry[V] {
+	return &expireContext[V]{ctx: ctx}
+}
+
+type expireContext[V any] struct {
+	ctx context.Context
+}
+
+func (e *expireContext[V]) IsExpired(v *Value[V]) bool {
+	return e.ctx.Err() != nil
 }
