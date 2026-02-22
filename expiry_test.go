@@ -263,6 +263,7 @@ func TestExpiryCallback(t *testing.T) {
 	var expiredKey string
 	var expiredValue int
 	var callbackCalled bool
+	var callback2Called bool
 
 	callback := func(k string, v int) {
 		expiredKey = k
@@ -270,9 +271,16 @@ func TestExpiryCallback(t *testing.T) {
 		callbackCalled = true
 	}
 
+	callback2 := func(k string, v int) {
+		if k == expiredKey && v == expiredValue {
+			callback2Called = true
+		}
+	}
+
 	opts := []Option[string, int]{
 		WithExpiry[string, int](ExpireAfterUses[int](1)),
 		WithExpiryCallback[string, int](callback),
+		WithExpiryCallback[string, int](callback2),
 	}
 
 	fetch := func(k string) (int, error) {
@@ -300,6 +308,9 @@ func TestExpiryCallback(t *testing.T) {
 
 	if !callbackCalled {
 		t.Fatal("Callback was not called")
+	}
+	if !callback2Called {
+		t.Fatal("Callback 2 was not called")
 	}
 	if expiredKey != "key" {
 		t.Errorf("Expected key 'key', got '%s'", expiredKey)

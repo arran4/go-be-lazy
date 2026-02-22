@@ -120,18 +120,18 @@ func (l *Value[T]) IsLoaded() bool {
 
 // args holds the configuration for Map operations.
 type args[K comparable, V any] struct {
-	dontFetch      bool
-	refresh        bool
-	clear          bool
-	must           bool
-	mustCached     bool
-	setID          *K
-	setValue       *V
-	defaultValue   *V
-	maxSize        int
-	evictionPolicy EvictionPolicy[K, V]
-	expiry         Expiry[V]
-	expiryCallback func(K, V)
+	dontFetch       bool
+	refresh         bool
+	clear           bool
+	must            bool
+	mustCached      bool
+	setID           *K
+	setValue        *V
+	defaultValue    *V
+	maxSize         int
+	evictionPolicy  EvictionPolicy[K, V]
+	expiry          Expiry[V]
+	expiryCallbacks []func(K, V)
 }
 
 // Option configures the behavior of the Map function.
@@ -188,7 +188,7 @@ func WithExpiry[K comparable, V any](policy Expiry[V]) Option[K, V] {
 
 // WithExpiryCallback returns an Option that specifies a callback to be called when a value expires.
 func WithExpiryCallback[K comparable, V any](callback func(K, V)) Option[K, V] {
-	return func(a *args[K, V]) { a.expiryCallback = callback }
+	return func(a *args[K, V]) { a.expiryCallbacks = append(a.expiryCallbacks, callback) }
 }
 
 // Map retrieves or creates a lazy Value in the provided map.
@@ -255,9 +255,13 @@ WriteLock:
 			expired = true
 		}
 		if expired {
-			if args.expiryCallback != nil {
+			if len(args.expiryCallbacks) > 0 {
 				v, _, _ := val.Value()
-				onExpire = func() { args.expiryCallback(id, v) }
+				onExpire = func() {
+					for _, callback := range args.expiryCallbacks {
+						callback(id, v)
+					}
+				}
 			}
 			delete(*m, id)
 			lv = &Value[V]{}
