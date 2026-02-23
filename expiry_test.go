@@ -106,14 +106,20 @@ func TestExpireAt(t *testing.T) {
 		return fetchCount, nil
 	}
 
-	Map(&m, &mu, "key", fetch, opts...)
-	Map(&m, &mu, "key", fetch, opts...)
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 1 {
 		t.Errorf("expected 1 fetch, got %d", fetchCount)
 	}
 
 	time.Sleep(200 * time.Millisecond)
-	Map(&m, &mu, "key", fetch, opts...)
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 2 {
 		t.Errorf("expected 2 fetches, got %d", fetchCount)
 	}
@@ -138,13 +144,19 @@ func TestExpireAny(t *testing.T) {
 		return fetchCount, nil
 	}
 
-	Map(&m, &mu, "key", fetch, opts...) // 1 use
-	Map(&m, &mu, "key", fetch, opts...) // 2 uses
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 1 {
 		t.Errorf("expected 1 fetch, got %d", fetchCount)
 	}
 
-	Map(&m, &mu, "key", fetch, opts...) // 3rd access -> Expired by uses
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 2 {
 		t.Errorf("expected 2 fetches, got %d", fetchCount)
 	}
@@ -168,14 +180,20 @@ func TestExpireAll(t *testing.T) {
 		return fetchCount, nil
 	}
 
-	Map(&m, &mu, "key", fetch, opts...) // 1 use
-	Map(&m, &mu, "key", fetch, opts...) // 2 uses. Time not expired.
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 1 {
 		t.Errorf("expected 1 fetch, got %d", fetchCount)
 	}
 
 	// Uses condition met, but time not met. Should not expire.
-	Map(&m, &mu, "key", fetch, opts...)
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 1 {
 		t.Errorf("expected 1 fetch (not expired), got %d", fetchCount)
 	}
@@ -184,7 +202,9 @@ func TestExpireAll(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Now both met
-	Map(&m, &mu, "key", fetch, opts...)
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if fetchCount != 2 {
 		t.Errorf("expected 2 fetches, got %d", fetchCount)
 	}
@@ -201,8 +221,12 @@ func TestLazyMapWithExpiry(t *testing.T) {
 		return count, nil
 	}
 
-	lm.Get("a", fetch) // count=1
-	lm.Get("a", fetch) // Expired -> count=2
+	if _, err := lm.Get("a", fetch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := lm.Get("a", fetch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if count != 2 {
 		t.Errorf("Expected 2 fetches for LazyMap with ExpireAfterUses(1), got %d", count)
@@ -239,6 +263,9 @@ func TestExpireContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if v != 1 {
+		t.Errorf("expected 1, got %d", v)
+	}
 	if fetchCount != 1 {
 		t.Errorf("expected 1 fetch, got %d", fetchCount)
 	}
@@ -250,6 +277,9 @@ func TestExpireContext(t *testing.T) {
 	v, err = Map(&m, &mu, "key", fetch, opts...)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if v != 2 {
+		t.Errorf("expected 2, got %d", v)
 	}
 	if fetchCount != 2 {
 		t.Errorf("expected 2 fetches, got %d", fetchCount)

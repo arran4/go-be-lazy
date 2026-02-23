@@ -113,18 +113,18 @@ func ExampleLazyMap_withTimeExpiry() {
 	}
 
 	// Fetch 1
-	cache.Get("bar", fetch)
+	_, _ = cache.Get("bar", fetch)
 	fmt.Printf("Calls: %d\n", callCount)
 
 	// Immediate fetch (cached)
-	cache.Get("bar", fetch)
+	_, _ = cache.Get("bar", fetch)
 	fmt.Printf("Calls: %d\n", callCount)
 
 	// Wait for expiry
 	time.Sleep(20 * time.Millisecond)
 
 	// Fetch 2 (refreshed)
-	cache.Get("bar", fetch)
+	_, _ = cache.Get("bar", fetch)
 	fmt.Printf("Calls: %d\n", callCount)
 
 	// Output:
@@ -148,14 +148,14 @@ func ExampleLazyMap_withContextExpiry() {
 	}
 
 	// Fetch 1
-	cache.Get("baz", fetch)
+	_, _ = cache.Get("baz", fetch)
 	fmt.Printf("Calls: %d\n", callCount)
 
 	// Cancel context
 	cancel()
 
 	// Fetch 2 (refreshed because context is done)
-	cache.Get("baz", fetch)
+	_, _ = cache.Get("baz", fetch)
 	fmt.Printf("Calls: %d\n", callCount)
 
 	// Output:
