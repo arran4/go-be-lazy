@@ -26,9 +26,10 @@ var (
 // even if accessed concurrently.
 // It uses atomic.Value and sync.Mutex for synchronization.
 type Value[T any] struct {
-	val  atomic.Value
-	mu   sync.Mutex
-	uses atomic.Int64
+	val        atomic.Value
+	mu         sync.Mutex
+	uses       atomic.Int64
+	lastAccess atomic.Int64
 }
 
 // Load ensures the value is loaded by executing fn if it hasn't been loaded yet.
@@ -37,6 +38,7 @@ type Value[T any] struct {
 func (l *Value[T]) Load(fn func() (T, error)) (T, error) {
 	if v := l.val.Load(); v != nil {
 		l.uses.Add(1)
+		l.updateLastAccess()
 		r := v.(*result[T])
 		return r.value, r.err
 	}
@@ -44,12 +46,14 @@ func (l *Value[T]) Load(fn func() (T, error)) (T, error) {
 	defer l.mu.Unlock()
 	if v := l.val.Load(); v != nil {
 		l.uses.Add(1)
+		l.updateLastAccess()
 		r := v.(*result[T])
 		return r.value, r.err
 	}
 	val, err := fn()
 	l.val.Store(&result[T]{value: val, err: err, createdAt: time.Now()})
 	l.uses.Add(1)
+	l.updateLastAccess()
 	return val, err
 }
 
@@ -66,12 +70,14 @@ func (l *Value[T]) Set(v T) {
 		return
 	}
 	l.val.Store(&result[T]{value: v, err: nil, createdAt: time.Now()})
+	l.updateLastAccess()
 }
 
 // Store forcibly sets the value, bypassing the "once" check.
 // This is used internally to overwrite an error state with a default value.
 func (l *Value[T]) Store(v T) {
 	l.val.Store(&result[T]{value: v, err: nil, createdAt: time.Now()})
+	l.updateLastAccess()
 }
 
 // Peek returns the cached value and true if it has been loaded.
@@ -80,6 +86,7 @@ func (l *Value[T]) Store(v T) {
 func (l *Value[T]) Peek() (T, bool) {
 	if v := l.val.Load(); v != nil {
 		l.uses.Add(1)
+		l.updateLastAccess()
 		r := v.(*result[T])
 		return r.value, true
 	}
@@ -100,6 +107,19 @@ func (l *Value[T]) CreatedAt() time.Time {
 // Uses returns the number of times the value has been accessed.
 func (l *Value[T]) Uses() int64 {
 	return l.uses.Load()
+}
+
+// LastAccess returns the time when the value was last accessed.
+// Returns zero time if not loaded.
+func (l *Value[T]) LastAccess() time.Time {
+	if v := l.lastAccess.Load(); v != 0 {
+		return time.Unix(0, v)
+	}
+	return time.Time{}
+}
+
+func (l *Value[T]) updateLastAccess() {
+	l.lastAccess.Store(time.Now().UnixNano())
 }
 
 // Value returns the cached value, true if loaded, and error if any.
