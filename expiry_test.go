@@ -285,3 +285,153 @@ func TestExpireContext(t *testing.T) {
 		t.Errorf("expected 2 fetches, got %d", fetchCount)
 	}
 }
+
+func TestExpireAfterLastAccess(t *testing.T) {
+	var mu sync.RWMutex
+	m := make(map[string]*Value[int])
+
+	// Expire after 100ms since last access
+	opts := []Option[string, int]{
+		WithExpiry[string, int](ExpireAfterLastAccess[int](100 * time.Millisecond)),
+	}
+
+	fetchCount := 0
+	fetch := func(k string) (int, error) {
+		fetchCount++
+		return fetchCount, nil
+	}
+
+	// First access (T=0)
+	v, err := Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v != 1 {
+		t.Errorf("expected 1, got %d", v)
+	}
+
+	// Access at T=50ms (Should not expire, updates last access to T=50ms)
+	time.Sleep(50 * time.Millisecond)
+	v, err = Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v != 1 {
+		t.Errorf("expected 1, got %d", v)
+	}
+	if fetchCount != 1 {
+		t.Errorf("expected 1 fetch, got %d", fetchCount)
+	}
+
+	// Access at T=120ms (70ms since last access T=50ms). Should NOT expire.
+	// ExpireAfterLastAccess is 100ms.
+	time.Sleep(70 * time.Millisecond)
+	v, err = Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v != 1 {
+		t.Errorf("expected 1, got %d", v)
+	}
+	if fetchCount != 1 {
+		t.Errorf("expected 1 fetch, got %d", fetchCount)
+	}
+
+	// Access at T=250ms (130ms since last access T=120ms). Should expire.
+	time.Sleep(130 * time.Millisecond)
+	v, err = Map(&m, &mu, "key", fetch, opts...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v != 2 {
+		t.Errorf("expected 2, got %d", v)
+	}
+	if fetchCount != 2 {
+		t.Errorf("expected 2 fetches, got %d", fetchCount)
+	}
+}
+
+func TestExpireWhenAll(t *testing.T) {
+	var mu sync.RWMutex
+	m := make(map[string]*Value[int])
+
+	// Expire if uses >= 2 AND time > 100ms
+	opts := []Option[string, int]{
+		WithExpiry[string, int](ExpireWhenAll(
+			ExpireAfterUses[int](2),
+			ExpireAfter[int](100*time.Millisecond),
+		)),
+	}
+
+	fetchCount := 0
+	fetch := func(k string) (int, error) {
+		fetchCount++
+		return fetchCount, nil
+	}
+
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Errorf("expected 1 fetch, got %d", fetchCount)
+	}
+
+	// Uses condition met (uses=2), but time not met. Should not expire.
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Errorf("expected 1 fetch (not expired), got %d", fetchCount)
+	}
+
+	// Wait for time
+	time.Sleep(200 * time.Millisecond)
+
+	// Now both met
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 2 {
+		t.Errorf("expected 2 fetches, got %d", fetchCount)
+	}
+}
+
+func TestExpireWhenAny(t *testing.T) {
+	var mu sync.RWMutex
+	m := make(map[string]*Value[int])
+
+	// Expire if uses > 2 OR time > 100ms
+	// We will trigger uses first
+	opts := []Option[string, int]{
+		WithExpiry[string, int](ExpireWhenAny(
+			ExpireAfterUses[int](2),
+			ExpireAfter[int](1*time.Hour),
+		)),
+	}
+
+	fetchCount := 0
+	fetch := func(k string) (int, error) {
+		fetchCount++
+		return fetchCount, nil
+	}
+
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Errorf("expected 1 fetch, got %d", fetchCount)
+	}
+
+	if _, err := Map(&m, &mu, "key", fetch, opts...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchCount != 2 {
+		t.Errorf("expected 2 fetches, got %d", fetchCount)
+	}
+}

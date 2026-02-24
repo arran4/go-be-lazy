@@ -40,6 +40,23 @@ func (e *expireAfter[V]) IsExpired(v *Value[V]) bool {
 	return time.Since(createdAt) > e.d
 }
 
+// ExpireAfterLastAccess returns an Expiry policy that expires the value after the given duration since last access.
+func ExpireAfterLastAccess[V any](d time.Duration) Expiry[V] {
+	return &expireAfterLastAccess[V]{d: d}
+}
+
+type expireAfterLastAccess[V any] struct {
+	d time.Duration
+}
+
+func (e *expireAfterLastAccess[V]) IsExpired(v *Value[V]) bool {
+	lastAccess := v.LastAccess()
+	if lastAccess.IsZero() {
+		return false
+	}
+	return time.Since(lastAccess) > e.d
+}
+
 // ExpireAfterUses returns an Expiry policy that expires the value after the given number of uses.
 func ExpireAfterUses[V any](n int64) Expiry[V] {
 	return &expireAfterUses[V]{n: n}
@@ -53,16 +70,16 @@ func (e *expireAfterUses[V]) IsExpired(v *Value[V]) bool {
 	return v.Uses() >= e.n
 }
 
-// ExpireAll returns an Expiry policy that expires if ALL of the given policies expire.
-func ExpireAll[V any](policies ...Expiry[V]) Expiry[V] {
-	return &expireAll[V]{policies: policies}
+// ExpireWhenAll returns an Expiry policy that expires if ALL of the given policies expire.
+func ExpireWhenAll[V any](policies ...Expiry[V]) Expiry[V] {
+	return &expireWhenAll[V]{policies: policies}
 }
 
-type expireAll[V any] struct {
+type expireWhenAll[V any] struct {
 	policies []Expiry[V]
 }
 
-func (e *expireAll[V]) IsExpired(v *Value[V]) bool {
+func (e *expireWhenAll[V]) IsExpired(v *Value[V]) bool {
 	if len(e.policies) == 0 {
 		return false
 	}
@@ -74,22 +91,34 @@ func (e *expireAll[V]) IsExpired(v *Value[V]) bool {
 	return true
 }
 
-// ExpireAny returns an Expiry policy that expires if ANY of the given policies expire.
-func ExpireAny[V any](policies ...Expiry[V]) Expiry[V] {
-	return &expireAny[V]{policies: policies}
+// ExpireAll returns an Expiry policy that expires if ALL of the given policies expire.
+// Deprecated: Use ExpireWhenAll instead.
+func ExpireAll[V any](policies ...Expiry[V]) Expiry[V] {
+	return ExpireWhenAll(policies...)
 }
 
-type expireAny[V any] struct {
+// ExpireWhenAny returns an Expiry policy that expires if ANY of the given policies expire.
+func ExpireWhenAny[V any](policies ...Expiry[V]) Expiry[V] {
+	return &expireWhenAny[V]{policies: policies}
+}
+
+type expireWhenAny[V any] struct {
 	policies []Expiry[V]
 }
 
-func (e *expireAny[V]) IsExpired(v *Value[V]) bool {
+func (e *expireWhenAny[V]) IsExpired(v *Value[V]) bool {
 	for _, p := range e.policies {
 		if p.IsExpired(v) {
 			return true
 		}
 	}
 	return false
+}
+
+// ExpireAny returns an Expiry policy that expires if ANY of the given policies expire.
+// Deprecated: Use ExpireWhenAny instead.
+func ExpireAny[V any](policies ...Expiry[V]) Expiry[V] {
+	return ExpireWhenAny(policies...)
 }
 
 // NeverExpires returns an Expiry policy that never expires.
