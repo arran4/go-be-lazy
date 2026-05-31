@@ -1,3 +1,6 @@
+[extend]
+useDefault = true
+
 title = "repo gitleaks config"
 
 [allowlist]
